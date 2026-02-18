@@ -1,11 +1,9 @@
 ---
 - name: Despliegue de ARK_DEPLOY en Producción
   hosts: ark_servers
-  become: true
+  become: false
   vars:
-    project_path: "/opt/ark_deploy"
-    docker_network_name: "ark_production"
-    docker_network_subnet: "192.168.200.0/24"
+    project_path: "/home/raztreuzz/ark_deploy"
 
   pre_tasks:
     - name: Validar que env_file fue provisto
@@ -35,8 +33,6 @@
         path: "{{ project_path }}"
         state: directory
         mode: "0755"
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
 
     - name: 2. Copiando archivo .env.prod desde Jenkins al servidor
       ansible.posix.synchronize:
@@ -58,20 +54,13 @@
           - "--exclude=.env"
           - "--exclude=.env.prod"
 
-    - name: 4. Copiando el archivo docker-compose.prod.yml desde Jenkins al servidor
+    - name: 4. Copiando docker-compose.prod.yml desde Jenkins al servidor
       ansible.posix.synchronize:
         src: "{{ compose_file }}"
         dest: "{{ project_path }}/docker-compose.prod.yml"
         delete: false
 
-    - name: 5. Administrando red de Docker
-      community.docker.docker_network:
-        name: "{{ docker_network_name }}"
-        driver: bridge
-        ipam_config:
-          - subnet: "{{ docker_network_subnet }}"
-
-    - name: 6. Levantar la infraestructura con Docker Compose
+    - name: 5. Levantar la infraestructura con Docker Compose
       community.docker.docker_compose_v2:
         project_src: "{{ project_path }}"
         files:
