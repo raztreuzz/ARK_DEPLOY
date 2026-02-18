@@ -1,0 +1,34 @@
+# binaries
+/bin/
+/build/
+*.exe
+*.out
+
+# env
+.env
+.env.prod
+.env.prod.example
+
+# Production files (Never commit!)
+docker-compose.prod.yml
+*.prod.backup
+
+# logs
+*.log
+
+# ide
+.idea/
+.vscode/
+
+# os
+.DS_Store
+
+# Ansible
+*.retry
+
+# Docker
+docker-compose.override.yml
+
+# Node
+node_modules/
+frontend/node_modules/
