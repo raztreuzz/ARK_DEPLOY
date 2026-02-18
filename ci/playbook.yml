@@ -1,39 +1,68 @@
 ---
 - name: Despliegue de ARK_DEPLOY en Producción
-  hosts: all
-  become: false
+  hosts: ark_servers
+  become: true
   vars:
     project_path: "/opt/ark_deploy"
     docker_network_name: "ark_production"
     docker_network_subnet: "192.168.200.0/24"
 
+  pre_tasks:
+    - name: Validar que env_file fue provisto
+      ansible.builtin.assert:
+        that:
+          - env_file is defined
+          - env_file | length > 0
+        fail_msg: "Falta -e env_file=... (ruta al .env.prod en Jenkins/agent)"
+
+    - name: Validar que repo_dir fue provisto
+      ansible.builtin.assert:
+        that:
+          - repo_dir is defined
+          - repo_dir | length > 0
+        fail_msg: "Falta -e repo_dir=... (ruta al workspace del repo en Jenkins/agent)"
+
+    - name: Validar que compose_file fue provisto
+      ansible.builtin.assert:
+        that:
+          - compose_file is defined
+          - compose_file | length > 0
+        fail_msg: "Falta -e compose_file=... (ruta al docker-compose.prod.yml en Jenkins/agent)"
+
   tasks:
     - name: 1. Creando directorio del proyecto si no existe
-      file:
+      ansible.builtin.file:
         path: "{{ project_path }}"
         state: directory
-        mode: '0755'
+        mode: "0755"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
 
     - name: 2. Copiando archivo .env.prod desde Jenkins al servidor
-      ansible.posix.synchronize:        
-        src: "{{ env_file }}" 
+      ansible.posix.synchronize:
+        src: "{{ env_file }}"
         dest: "{{ project_path }}/.env.prod"
+        delete: false
 
     - name: 3. Sincronizando archivos del proyecto
       ansible.posix.synchronize:
         src: "{{ repo_dir }}/"
-        dest: "{{ project_path }}/"               
+        dest: "{{ project_path }}/"
+        delete: true
         rsync_opts:
           - "--exclude=.git"
           - "--exclude=.idea"
           - "--exclude=.vscode"
           - "--exclude=node_modules"
           - "--exclude=frontend/node_modules"
+          - "--exclude=.env"
+          - "--exclude=.env.prod"
 
     - name: 4. Copiando el archivo docker-compose.prod.yml desde Jenkins al servidor
-      ansible.posix.synchronize:        
-        src: "{{ compose_file }}" 
+      ansible.posix.synchronize:
+        src: "{{ compose_file }}"
         dest: "{{ project_path }}/docker-compose.prod.yml"
+        delete: false
 
     - name: 5. Administrando red de Docker
       community.docker.docker_network:
@@ -49,4 +78,4 @@
           - docker-compose.prod.yml
         state: present
         build: always
-        pull: always
+        pull: missing
