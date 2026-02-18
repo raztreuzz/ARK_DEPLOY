@@ -7,7 +7,10 @@
 # env
 .env
 .env.prod
-.env.prod.example
+.env.dev
+env/.env*
+!env/README.md
+!env/.env.example
 
 # Production files (Never commit!)
 docker-compose.prod.yml
