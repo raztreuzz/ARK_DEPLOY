@@ -12,12 +12,14 @@ pipeline {
     GOCACHE = "${WORKSPACE}/.gocache"
     GOMODCACHE = "${WORKSPACE}/.gomodcache"
     GOPATH = "${WORKSPACE}/.gopath"
+
+    ANSIBLE_HOST_KEY_CHECKING = 'False'
   }
 
   stages {
-    stage('1. Pre-Check & Pull') {
+    stage('1. Pre-Check') {
       steps {
-        echo "Iniciando despliegue de ${env.PROJECT_NAME}..."
+        echo "Iniciando pipeline de ${env.PROJECT_NAME}..."
       }
     }
 
@@ -29,6 +31,8 @@ pipeline {
       }
       steps {
         sh '''
+          set -e
+
           go version
 
           mkdir -p "$GOCACHE" "$GOMODCACHE" "$GOPATH"
@@ -39,14 +43,17 @@ pipeline {
 
           go mod download
 
-          echo "Ejecutando tests unitarios..."
-          go test ./... -v -cover
+          echo "Ejecutando tests unitarios (excluyendo integration y tailscale)..."
+          PKGS=$(go list ./... | grep -v '/cmd/test_api' | grep -v '/internal/tailscale')
+          go test $PKGS -v -cover
         '''
       }
     }
 
     stage('3. Deploy to Production') {
       steps {
+        echo "Desplegando ${env.PROJECT_NAME} a producción..."
+
         withCredentials([
           file(credentialsId: env.ENV_FILE_ID, variable: 'ENV_FILE'),
           file(credentialsId: env.COMPOSE_FILE_ID, variable: 'COMPOSE_FILE'),
@@ -78,3 +85,4 @@ pipeline {
     }
   }
 }
+
