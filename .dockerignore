@@ -24,6 +24,7 @@ frontend/dist/
 frontend/build/
 frontend/.next/
 frontend/.cache/
+frontend/
 
 docker-compose*.yml
 README.md
