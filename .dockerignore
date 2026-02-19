@@ -32,3 +32,12 @@ ci/
 *.retry
 ssh*.key
 
+.idea
+
+.gocache
+.gomodcache
+.gopath
+**/.gocache
+**/.gomodcache
+**/.gopath
+**/.cache
