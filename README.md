@@ -196,88 +196,522 @@ ARK_DEPLOY/
 
 ## API Endpoints
 
+### Base URL
+
+#### Production
+- **Frontend**: `http://100.103.47.3:3000`
+- **Backend API**: `http://127.0.0.1:5050` (localhost only)
+- **Internal**: `http://ark-deploy:5050` (container network)
+
+#### Development
+- **Frontend**: `http://localhost:3000`
+- **Backend API**: `http://localhost:5050`
+
+---
+
 ### Health Check
 
-```http
-GET /health
+#### GET /health
+
+Returns server health status.
+
+**Response:**
+```json
+{
+  "status": "ok"
+}
 ```
 
-Returns server status.
+**Status Code:** 200 OK
+
+---
 
 ### Products API
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/products` | Create a new product |
-| GET | `/products` | List all products |
-| GET | `/products/:id` | Get product by ID |
-| PUT | `/products/:id` | Update product |
-| DELETE | `/products/:id` | Delete product |
+#### GET /products
 
-**Product Model:**
+List all registered products with their Jenkins job mappings.
+
+**Response:**
 ```json
 {
-  "id": "string",
-  "name": "string",
-  "description": "string",
+  "total": 2,
+  "products": [
+    {
+      "id": "ark-game",
+      "name": "ARK Game Server",
+      "description": "Main game server instance",
+      "jobs": {
+        "prod": "deploy-ark-prod",
+        "staging": "deploy-ark-staging"
+      }
+    }
+  ]
+}
+```
+
+**Status Code:** 200 OK
+
+**Frontend Integration:** Fully implemented - displays in product catalog with search/filter functionality.
+
+---
+
+#### GET /products/:id
+
+Retrieve details of a specific product by ID.
+
+**Response:**
+```json
+{
+  "id": "ark-game",
+  "name": "ARK Game Server",
+  "description": "Main game server instance",
   "jobs": {
-    "environment": "jenkins_job_name"
+    "prod": "deploy-ark-prod",
+    "staging": "deploy-ark-staging"
   }
 }
 ```
+
+**Status Codes:**
+- 200 OK - Product found
+- 404 Not Found - Product does not exist
+
+**Frontend Integration:** Not implemented. Backend ready.
+
+---
+
+#### POST /products
+
+Create a new product with Jenkins job mappings.
+
+**Request Body:**
+```json
+{
+  "id": "my-product",
+  "name": "My Product",
+  "description": "Product description",
+  "jobs": {
+    "prod": "jenkins-job-prod",
+    "dev": "jenkins-job-dev"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "id": "my-product",
+  "name": "My Product",
+  "description": "Product description",
+  "jobs": {
+    "prod": "jenkins-job-prod",
+    "dev": "jenkins-job-dev"
+  }
+}
+```
+
+**Status Codes:**
+- 201 Created - Product created successfully
+- 400 Bad Request - Invalid request body
+- 409 Conflict - Product ID already exists
+
+**Frontend Integration:** Not implemented. Requires modal form UI.
+
+---
+
+#### PUT /products/:id
+
+Update an existing product.
+
+**Request Body:**
+```json
+{
+  "name": "Updated Product Name",
+  "description": "Updated description",
+  "jobs": {
+    "prod": "new-jenkins-job"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "id": "my-product",
+  "name": "Updated Product Name",
+  "description": "Updated description",
+  "jobs": {
+    "prod": "new-jenkins-job"
+  }
+}
+```
+
+**Status Codes:**
+- 200 OK - Product updated
+- 400 Bad Request - Invalid request body
+- 404 Not Found - Product does not exist
+
+**Frontend Integration:** Not implemented. Requires edit modal UI.
+
+---
+
+#### DELETE /products/:id
+
+Delete a product from the system.
+
+**Response:**
+```json
+{
+  "message": "product deleted"
+}
+```
+
+**Status Codes:**
+- 200 OK - Product deleted
+- 404 Not Found - Product does not exist
+
+**Frontend Integration:** Not implemented. Requires delete button with confirmation.
+
+---
 
 ### Deployments API
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/jobs` | List available Jenkins jobs |
-| POST | `/deployments` | Trigger a new deployment |
-| GET | `/deployments/pending` | View pending jobs in queue |
-| GET | `/deployments/queue` | Convert queue URL to build number |
-| GET | `/deployments/job/:job/build/:build/status` | Get build status |
-| GET | `/deployments/job/:job/build/:build/logs` | Stream build logs |
+#### GET /jobs
 
-**Deployment Request:**
+List all available Jenkins jobs.
+
+**Response:**
 ```json
 {
-  "product_id": "string",
-  "environment": "string",
+  "jobs": [
+    {
+      "name": "deploy-ark-prod",
+      "url": "http://jenkins.example.com/job/deploy-ark-prod/"
+    },
+    {
+      "name": "build-backend",
+      "url": "http://jenkins.example.com/job/build-backend/"
+    }
+  ]
+}
+```
+
+**Status Code:** 200 OK
+
+**Frontend Integration:** Not displayed in UI. Backend ready.
+
+---
+
+#### POST /deployments
+
+Trigger a new deployment via Jenkins.
+
+**Request Body (Product-based):**
+```json
+{
+  "product_id": "ark-game",
+  "environment": "prod",
   "parameters": {
-    "key": "value"
+    "VERSION": "1.2.3",
+    "TARGET_HOST": "100.82.15.42"
   }
 }
 ```
 
-**Alternative (Direct Job):**
+**Request Body (Direct Job):**
 ```json
 {
-  "job_name": "string",
+  "job_name": "deploy-ark-prod",
   "parameters": {
-    "key": "value"
+    "VERSION": "1.2.3",
+    "TARGET_HOST": "100.82.15.42"
   }
 }
 ```
+
+**Response:**
+```json
+{
+  "job_name": "deploy-ark-prod",
+  "queue_url": "http://jenkins.example.com/queue/item/123/",
+  "message": "Deployment triggered successfully"
+}
+```
+
+**Status Codes:**
+- 201 Created - Deployment triggered
+- 400 Bad Request - Invalid request or missing product/job
+- 404 Not Found - Product not found
+- 500 Internal Server Error - Jenkins connection failed
+
+**Frontend Integration:** Fully implemented via deployment modal. Supports product selection, target host selection, and real-time status updates.
+
+---
+
+#### GET /deployments/pending
+
+View pending jobs in Jenkins queue waiting for execution.
+
+**Response:**
+```json
+{
+  "pending_jobs": [
+    {
+      "id": 123,
+      "task": {
+        "name": "deploy-ark-prod"
+      },
+      "inQueueSince": 1708473600000
+    }
+  ]
+}
+```
+
+**Status Code:** 200 OK
+
+**Frontend Integration:** Not implemented. Backend ready.
+
+---
+
+#### GET /deployments/queue
+
+Convert Jenkins queue URL to build number once job starts executing.
+
+**Query Parameters:**
+- `queue_url` (required) - Jenkins queue item URL
+
+**Example:**
+```
+GET /deployments/queue?queue_url=http://jenkins.example.com/queue/item/123/
+```
+
+**Response:**
+```json
+{
+  "build_number": 42
+}
+```
+
+**Status Codes:**
+- 200 OK - Build number retrieved
+- 400 Bad Request - Missing queue_url parameter
+- 404 Not Found - Queue item not found or not started yet
+
+**Frontend Integration:** Not implemented. Backend ready.
+
+---
+
+#### GET /deployments/job/:job/build/:build/status
+
+Get current status of a specific build.
+
+**Example:**
+```
+GET /deployments/job/deploy-ark-prod/build/42/status
+```
+
+**Response:**
+```json
+{
+  "building": false,
+  "result": "SUCCESS",
+  "duration": 45000,
+  "timestamp": 1708473600000,
+  "number": 42,
+  "url": "http://jenkins.example.com/job/deploy-ark-prod/42/"
+}
+```
+
+**Possible `result` values:**
+- `SUCCESS` - Build completed successfully
+- `FAILURE` - Build failed
+- `UNSTABLE` - Build completed with test failures
+- `ABORTED` - Build was manually stopped
+- `null` - Build still in progress
+
+**Status Code:** 200 OK
+
+**Frontend Integration:** Partially implemented. Shows "provisioning" and "running" states. Does not poll for completion status.
+
+---
+
+#### GET /deployments/job/:job/build/:build/logs
+
+Retrieve complete console output logs from a build.
+
+**Example:**
+```
+GET /deployments/job/deploy-ark-prod/build/42/logs
+```
+
+**Response:**
+Plain text with Jenkins console output:
+```
+Started by user admin
+Building remotely on agent-01
+[Pipeline] Start of Pipeline
+[Pipeline] node
+Running on agent-01
+[Pipeline] {
+...
+[Pipeline] End of Pipeline
+Finished: SUCCESS
+```
+
+**Status Code:** 200 OK
+
+**Frontend Integration:** Not implemented. Backend ready for streaming. Requires SSE or polling implementation in frontend.
+
+---
 
 ### Tailscale API
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/tailscale/devices` | List all devices in network |
-| GET | `/tailscale/devices/:id` | Get device details |
-| POST | `/tailscale/auth-keys` | Create authentication key |
-| DELETE | `/tailscale/devices/:id` | Remove device from network |
+#### GET /tailscale/devices
 
-**Auth Key Request:**
+List all devices connected to the Tailscale network.
+
+**Response:**
 ```json
 {
-  "description": "string",
+  "devices": [
+    {
+      "id": "123456",
+      "name": "ark-prod-server",
+      "hostname": "ark-prod-server",
+      "addresses": ["100.82.15.42"],
+      "online": true,
+      "isExitNode": true,
+      "os": "linux",
+      "clientVersion": "1.58.2",
+      "lastSeen": "2026-02-20T12:30:45Z"
+    }
+  ],
+  "count": 3
+}
+```
+
+**Status Code:** 200 OK
+
+**Frontend Integration:** Fully implemented. Displays as interactive tree view organized by region with online/offline status indicators.
+
+---
+
+#### GET /tailscale/devices/:id
+
+Get detailed information about a specific device.
+
+**Response:**
+```json
+{
+  "id": "123456",
+  "name": "ark-prod-server",
+  "hostname": "ark-prod-server",
+  "addresses": ["100.82.15.42", "fd7a:115c:a1e0::1"],
+  "online": true,
+  "isExitNode": true,
+  "os": "linux",
+  "clientVersion": "1.58.2",
+  "lastSeen": "2026-02-20T12:30:45Z",
+  "created": "2026-01-15T08:20:00Z",
+  "user": "admin@example.com"
+}
+```
+
+**Status Codes:**
+- 200 OK - Device found
+- 500 Internal Server Error - Tailscale API error
+
+**Frontend Integration:** Not implemented. Backend ready.
+
+---
+
+#### POST /tailscale/auth-keys
+
+Generate an authentication key for registering new devices to the Tailscale network.
+
+**Request Body:**
+```json
+{
+  "description": "Key for new production server",
   "reusable": false,
   "ephemeral": false,
   "preauthorized": true,
   "expiry_seconds": 3600,
-  "tags": ["tag:value"]
+  "tags": ["tag:prod", "tag:server"]
 }
 ```
+
+**Field Descriptions:**
+- `description` - Human-readable description (sanitized automatically)
+- `reusable` - Whether key can be used multiple times
+- `ephemeral` - Device is removed when disconnected
+- `preauthorized` - Skip authorization approval step
+- `expiry_seconds` - Key expiration time (default: 3600)
+- `tags` - ACL tags to apply to device (optional)
+
+**Response:**
+```json
+{
+  "auth_key": "tskey-auth-kxxxxxxxxxxxxxxx-yyyyyyyyyyyyyyyyy",
+  "id": "key-123",
+  "created": "2026-02-20T12:30:45Z",
+  "expires": "2026-02-20T13:30:45Z",
+  "instructions": "Install Tailscale on the device and run: tailscale up --authkey=tskey-auth-kxxxxxxxxxxxxxxx-yyyyyyyyyyyyyyyyy"
+}
+```
+
+**Status Codes:**
+- 201 Created - Auth key generated successfully
+- 400 Bad Request - Invalid request body
+- 500 Internal Server Error - Tailscale API error
+
+**Security Note:** Description field is automatically sanitized to remove special characters that could cause Tailscale API errors.
+
+**Frontend Integration:** Fully implemented via "New Device" modal. Generates key and displays instructions. Auto-refreshes device list after 3 seconds.
+
+---
+
+#### DELETE /tailscale/devices/:id
+
+Remove a device from the Tailscale network.
+
+**Response:**
+```json
+{
+  "message": "Device deleted successfully",
+  "device_id": "123456"
+}
+```
+
+**Status Codes:**
+- 200 OK - Device removed
+- 400 Bad Request - Missing device ID
+- 500 Internal Server Error - Tailscale API error
+
+**Frontend Integration:** Not implemented. Requires delete button with confirmation dialog.
+
+---
+
+### Frontend Integration Status
+
+| Endpoint | HTTP Method | Frontend Status | Notes |
+|----------|-------------|-----------------|-------|
+| `/products` | GET | **Implemented** | Product catalog with search |
+| `/products/:id` | GET | Not implemented | Backend ready |
+| `/products` | POST | Not implemented | Requires create modal |
+| `/products/:id` | PUT | Not implemented | Requires edit modal |
+| `/products/:id` | DELETE | Not implemented | Requires delete button |
+| `/deployments` | POST | **Implemented** | Deployment modal functional |
+| `/deployments/job/.../status` | GET | Partial | Shows basic status only |
+| `/deployments/job/.../logs` | GET | Not implemented | Needs streaming UI |
+| `/deployments/pending` | GET | Not implemented | Backend ready |
+| `/tailscale/devices` | GET | **Implemented** | Tree view with regions |
+| `/tailscale/devices/:id` | GET | Not implemented | Backend ready |
+| `/tailscale/auth-keys` | POST | **Implemented** | New device modal functional |
+| `/tailscale/devices/:id` | DELETE | Not implemented | Requires delete button |
+
+**Summary:** Core read and deployment operations are functional. CRUD operations for products and advanced monitoring features pending UI implementation.
 
 ---
 

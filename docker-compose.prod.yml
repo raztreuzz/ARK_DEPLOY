@@ -1,0 +1,63 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: ark-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ark_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: always
+    networks:
+      - ark_production
+
+  ark-deploy:
+    image: ${ARK_BACKEND_IMAGE}
+    container_name: ark-deploy-backend
+    ports:
+      - "127.0.0.1:5050:5050"
+    env_file:
+      - .env.prod
+    environment:
+      REDIS_URL: "redis://redis:6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5050/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: always
+    networks:
+      - ark_production
+
+  ark-frontend:
+    image: ${ARK_FRONTEND_IMAGE}
+    container_name: ark-deploy-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      ark-deploy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: always
+    networks:
+      - ark_production
+
+networks:
+  ark_production:
+    driver: bridge
+
+volumes:
+  ark_redis_data:
