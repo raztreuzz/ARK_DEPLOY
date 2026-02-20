@@ -30,39 +30,9 @@ import {
   Share2
 } from 'lucide-react';
 
-const INITIAL_PRODUCTS = [
-  { 
-    id: 'prod-1', 
-    name: 'ARK Survival Evolved', 
-    version: 'v2.4.1', 
-    env: 'PROD',
-    status: 'success', 
-    lastRun: 'Hace 2 horas', 
-    buildNum: '#42', 
-    description: 'Instancia principal del servidor de juego con persistencia activa.'
-  },
-  { 
-    id: 'prod-2', 
-    name: 'ARK Cluster Maps', 
-    version: 'v1.0.5', 
-    env: 'STAGING',
-    status: 'idle', 
-    lastRun: 'Ayer', 
-    buildNum: '#12', 
-    description: 'Sincronización de mapas y transferencias de personajes entre servidores.'
-  }
-];
-
-const INITIAL_NODES = [
-  { name: 'ark-prod-01', ip: '100.82.15.42', status: 'active', region: 'Local', type: 'Exit Node' },
-  { name: 'ark-backup-02', ip: '100.10.5.20', status: 'idle', region: 'Cloud', type: 'Relay' },
-  { name: 'dev-node-razie', ip: '100.12.0.5', status: 'offline', region: 'Local', type: 'Direct' },
-  { name: 'storage-vault', ip: '100.40.1.15', status: 'active', region: 'Edge', type: 'Direct' }
-];
-
 export default function App() {
-  const [products, setProducts] = useState(INITIAL_PRODUCTS);
-  const [tailscaleNodes, setTailscaleNodes] = useState(INITIAL_NODES);
+  const [products, setProducts] = useState([]);
+  const [tailscaleNodes, setTailscaleNodes] = useState([]);
   const [filter, setFilter] = useState('');
   const [activeExecution, setActiveExecution] = useState(null);
   const [followLogs, setFollowLogs] = useState(true);
@@ -72,12 +42,64 @@ export default function App() {
   const [selectedProductForDeploy, setSelectedProductForDeploy] = useState(null);
   const [tempTargetHost, setTempTargetHost] = useState('');
 
-  const [logs, setLogs] = useState([
-    { id: 1, time: '14:30:05', msg: '[System] ARK_DEPLOY backend ready.', type: 'sys' },
-    { id: 2, time: '14:31:10', msg: '[Tailscale] Connected to private mesh.', type: 'sys' }
-  ]);
+  const [logs, setLogs] = useState([]);
 
   const logEndRef = useRef(null);
+
+  // Cargar datos del backend al montar el componente
+  useEffect(() => {
+    loadProducts();
+    loadTailscaleDevices();
+    addLog('[System] ARK_DEPLOY backend ready.', 'sys');
+    addLog('[Tailscale] Connecting to private mesh...', 'sys');
+  }, []);
+
+  const loadProducts = async () => {
+    try {
+      const response = await fetch('/api/products');
+      const data = await response.json();
+      if (data.products) {
+        // Mapear productos del backend al formato del frontend
+        const mappedProducts = data.products.map(p => ({
+          id: p.id,
+          name: p.name,
+          version: 'v1.0.0', // El backend no tiene version, usar default
+          env: 'PROD',
+          status: 'idle',
+          lastRun: 'Never',
+          buildNum: '-',
+          description: p.description || 'No description available'
+        }));
+        setProducts(mappedProducts);
+        addLog(`[API] Loaded ${mappedProducts.length} product(s) from backend.`, 'info');
+      }
+    } catch (error) {
+      console.error('Error loading products:', error);
+      addLog('[API] Failed to load products. Using offline mode.', 'err');
+    }
+  };
+
+  const loadTailscaleDevices = async () => {
+    try {
+      const response = await fetch('/api/tailscale/devices');
+      const data = await response.json();
+      if (data.devices) {
+        // Mapear dispositivos de Tailscale al formato del frontend
+        const mappedDevices = data.devices.map(d => ({
+          name: d.hostname || d.name,
+          ip: d.addresses?.[0] || 'N/A',
+          status: d.online ? 'active' : 'offline',
+          region: 'Cloud',
+          type: d.isExitNode ? 'Exit Node' : 'Direct'
+        }));
+        setTailscaleNodes(mappedDevices);
+        addLog(`[Tailscale] Connected. ${mappedDevices.length} node(s) in mesh.`, 'sys');
+      }
+    } catch (error) {
+      console.error('Error loading Tailscale devices:', error);
+      addLog('[Tailscale] Connection failed. Check API credentials.', 'err');
+    }
+  };
 
   useEffect(() => {
     if (followLogs && logEndRef.current) {
@@ -98,7 +120,7 @@ export default function App() {
     setIsDeployModalOpen(true);
   };
 
-  const confirmDeployment = () => {
+  const confirmDeployment = async () => {
     const host = tailscaleNodes.find(n => n.ip === tempTargetHost);
     if (!host || host.status === 'offline') return;
 
@@ -111,24 +133,84 @@ export default function App() {
     });
 
     addLog(`Desplegando ${selectedProductForDeploy.name} en ${host.name}...`, 'info');
-    setTimeout(() => {
-      setActiveExecution(prev => prev ? ({ ...prev, status: 'running' }) : null);
-      addLog(`[Jenkins] Pipeline iniciado en nodo remoto.`, 'info');
-    }, 1500);
+    
+    try {
+      // Llamada real al backend
+      const response = await fetch('/api/deployments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          product_id: selectedProductForDeploy.id,
+          target_host: host.ip,
+          environment: selectedProductForDeploy.env
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setActiveExecution(prev => prev ? ({ ...prev, status: 'running', buildId: data.build_id || prev.buildId }) : null);
+        addLog(`[Jenkins] Pipeline iniciado: ${data.job_name || 'unknown'}`, 'info');
+        addLog(`[Build] Build ID: ${data.build_id || 'N/A'}`, 'stage');
+      } else {
+        addLog(`[Error] Deployment failed: ${response.statusText}`, 'err');
+        setActiveExecution(null);
+      }
+    } catch (error) {
+      console.error('Error deploying:', error);
+      addLog(`[Error] Network error during deployment.`, 'err');
+      setActiveExecution(null);
+    }
   };
 
-  const addNewDevice = (e) => {
+  const addNewDevice = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const newNode = {
-      name: formData.get('name'),
-      ip: `100.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`,
-      status: 'active',
-      region: formData.get('region'),
-      type: 'Direct'
-    };
-    setTailscaleNodes([...tailscaleNodes, newNode]);
-    addLog(`[Tailscale] Dispositivo '${newNode.name}' vinculado a la red.`, 'sys');
+    const deviceName = formData.get('name');
+    const region = formData.get('region');
+    
+    try {
+      // Crear auth key en el backend
+      const response = await fetch('/api/tailscale/auth-keys', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          description: `Auth key for ${deviceName}`,
+          reusable: false,
+          ephemeral: false,
+          preauthorized: true,
+          expiry_seconds: 3600
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        addLog(`[Tailscale] Auth key created for '${deviceName}'.`, 'sys');
+        addLog(`[Tailscale] Run on device: tailscale up --authkey=<KEY>`, 'info');
+        
+        // Simular nodo agregado (en realidad aparecerá cuando el device se conecte)
+        const newNode = {
+          name: deviceName,
+          ip: 'Pending...',
+          status: 'idle',
+          region: region,
+          type: 'Direct'
+        };
+        setTailscaleNodes(prev => [...prev, newNode]);
+        
+        // Recargar dispositivos después de un momento
+        setTimeout(loadTailscaleDevices, 3000);
+      } else {
+        addLog(`[Error] Failed to create auth key: ${response.statusText}`, 'err');
+      }
+    } catch (error) {
+      console.error('Error creating auth key:', error);
+      addLog(`[Error] Network error creating auth key.`, 'err');
+    }
+    
     setIsNewDeviceModalOpen(false);
   };
 
