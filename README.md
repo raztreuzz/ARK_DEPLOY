@@ -108,7 +108,7 @@ TAILSCALE_TAILNET=example.com
 | Despliegues | `/deployments` | POST | Implementado |
 | Jenkins | `/jobs` | GET | Implementado |
 | Tailscale | `/tailscale/devices` | GET | Implementado |
-| Tailscale | `/tailscale/auth-keys` | POST | Implementado |
+| Tailscale | `/tailscale/devices/:id` | DELETE | Parcial |
 
 ---
 
@@ -189,11 +189,16 @@ stateDiagram-v2
     BuildCompleto --> RespuestaAPI: Devolver Estado
     RespuestaAPI --> [*]
     
-    ListoDespliegue --> GestionDispositivos: Tailscale
-    GestionDispositivos --> GenerarAuthKey: Auth Key
-    GenerarAuthKey --> APITailscale: Crear
-    APITailscale --> ListaDispositivos: Dispositivos
+    ListoDespliegue --> GestionDispositivos: Ver Tailscale
+    GestionDispositivos --> SincronizarDispositivos: Sincronizar
+    SincronizarDispositivos --> APITailscale: Obtener Dispositivos
+    APITailscale --> ListaDispositivos: Dispositivos Conectados
     ListaDispositivos --> [*]
+    
+    note right of GestionDispositivos
+        Los dispositivos se conectan
+        manualmente a la red Tailscale
+    end note
 ```
 
 ---
