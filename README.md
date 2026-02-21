@@ -173,33 +173,7 @@ go mod tidy
 
 ## Flujo de Eventos del Sistema
 
-```mermaid
-stateDiagram-v2
-    [*] --> CreacionProducto
-    CreacionProducto --> AlmacenProducto: Guardar Producto
-    AlmacenProducto --> MapeoJobs: Mapear a Jenkins
-    MapeoJobs --> ListoDespliegue: Listo
-    
-    ListoDespliegue --> SolicitudUsuario: Usuario Dispara Deploy
-    SolicitudUsuario --> DispararJenkins: Enviar Job
-    DispararJenkins --> Jenkins: Ejecutar
-    Jenkins --> MonitorBuild: En Cola
-    MonitorBuild --> EjecutandoBuild: Ejecutando
-    EjecutandoBuild --> BuildCompleto: Finalizado
-    BuildCompleto --> RespuestaAPI: Devolver Estado
-    RespuestaAPI --> [*]
-    
-    ListoDespliegue --> GestionDispositivos: Ver Tailscale
-    GestionDispositivos --> SincronizarDispositivos: Sincronizar
-    SincronizarDispositivos --> APITailscale: Obtener Dispositivos
-    APITailscale --> ListaDispositivos: Dispositivos Conectados
-    ListaDispositivos --> [*]
-    
-    note right of GestionDispositivos
-        Los dispositivos se conectan
-        manualmente a la red Tailscale
-    end note
-```
+![Diagrama de eventos](docs/Diagramas/Diagrama%20de%20eventos.png)
 
 ---
 

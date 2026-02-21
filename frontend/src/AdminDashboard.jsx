@@ -3,7 +3,7 @@ import {
   Play, RefreshCw, Activity, CheckCircle2, Clock, 
   Server, Terminal, Search, ShieldCheck, Globe, 
   Cpu, Copy, Eraser, ExternalLink, Package, Tag, 
-  Layers, X, Plus, ArrowRight, ShieldAlert, GitBranch, 
+  Layers, X, ArrowRight, ShieldAlert, GitBranch, 
   Network, Share2, Link2
 } from 'lucide-react';
 
@@ -50,7 +50,7 @@ export default function AdminDashboard() {
   const [activeExecution, setActiveExecution] = useState(null);
   const [followLogs, setFollowLogs] = useState(true);
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
-  const [isNewDeviceModalOpen, setIsNewDeviceModalOpen] = useState(false);
+
   const [selectedProductForDeploy, setSelectedProductForDeploy] = useState(null);
   const [tempTargetHost, setTempTargetHost] = useState('');
   const [logs, setLogs] = useState([]);
@@ -161,48 +161,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const addNewDevice = async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const deviceName = formData.get('name');
-    const region = formData.get('region');
-    
-    try {
-      const response = await fetch('/api/tailscale/auth-keys', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          description: `Auth key for ${deviceName}`,
-          reusable: false,
-          ephemeral: false,
-          preauthorized: true,
-          expiry_seconds: 3600
-        })
-      });
 
-      if (response.ok) {
-        const data = await response.json();
-        addLog(`[Tailscale] Auth key created for '${deviceName}'.`, LOG_TYPES.SYSTEM);
-        addLog(`[Tailscale] Run on device: tailscale up --authkey=<KEY>`, LOG_TYPES.INFO);
-        
-        const newNode = {
-          ...DEFAULT_NODE_VALUES,
-          name: deviceName,
-          ip: 'Pending...',
-          region: region
-        };
-        setTailscaleNodes(prev => [...prev, newNode]);
-        setTimeout(loadTailscaleDevices, 3000);
-      } else {
-        addLog(`[Error] Failed to create auth key: ${response.statusText}`, LOG_TYPES.ERROR);
-      }
-    } catch (error) {
-      console.error('Error creating auth key:', error);
-      addLog(`[Error] Network error creating auth key.`, LOG_TYPES.ERROR);
-    }
-    
-    setIsNewDeviceModalOpen(false);
-  };
 
   const addLog = (msg, type = LOG_TYPES.INFO) => {
     setLogs(prev => [...prev, { 
@@ -229,7 +188,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#020617] text-slate-100 font-sans p-4 md:p-8 flex flex-col selection:bg-blue-500/30">
       <DashboardHeader 
         nodeCount={tailscaleNodes.length}
-        onNewDevice={() => setIsNewDeviceModalOpen(true)}
+
       />
 
       <main className="max-w-7xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
@@ -269,12 +228,7 @@ export default function AdminDashboard() {
         />
       )}
 
-      {isNewDeviceModalOpen && (
-        <NewDeviceModal
-          onSubmit={addNewDevice}
-          onClose={() => setIsNewDeviceModalOpen(false)}
-        />
-      )}
+
 
       <CustomScrollbarStyles />
     </div>
@@ -303,12 +257,7 @@ const DashboardHeader = ({ nodeCount, onNewDevice }) => (
       </div>
     </div>
 
-    <button 
-      onClick={onNewDevice}
-      className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-[11px] font-black uppercase hover:bg-slate-800 transition-all text-slate-300 tracking-wider shadow-lg"
-    >
-      <Plus size={16} className="text-blue-400" /> New Device
-    </button>
+
   </header>
 );
 
@@ -624,63 +573,7 @@ const DeployModalTargets = ({ nodes, selectedHost, onSelectHost }) => (
   </div>
 );
 
-const NewDeviceModal = ({ onSubmit, onClose }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#020617]/90 backdrop-blur-md">
-    <div className="bg-slate-950 border border-slate-800 w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden">
-      <div className="px-8 py-6 border-b border-slate-800 flex items-center justify-between">
-        <h2 className="font-black uppercase tracking-[0.2em] text-xs flex items-center gap-3 text-slate-400">
-          <Link2 size={18} className="text-blue-500" /> Add Node to Mesh
-        </h2>
-        <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
-          <X size={24} />
-        </button>
-      </div>
-      
-      <form onSubmit={onSubmit} className="p-8 space-y-6">
-        <div className="bg-blue-600/5 p-4 rounded-2xl border border-blue-500/20 flex gap-4">
-          <ShieldAlert className="text-blue-500 shrink-0" size={20} />
-          <p className="text-[11px] text-slate-500 leading-relaxed font-bold uppercase tracking-tight">
-            Dispositivo debe tener Tailscale pre-instalado para el handshake inicial.
-          </p>
-        </div>
-        
-        <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block ml-1">
-            Device Hostname
-          </label>
-          <input 
-            required
-            name="name"
-            type="text" 
-            placeholder="ej. ark-node-tx-01"
-            className="w-full bg-slate-900 border border-slate-800 rounded-2xl px-5 py-4 text-sm focus:ring-1 ring-blue-500 outline-none text-white placeholder:text-slate-700"
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block ml-1">
-            Deployment Zone
-          </label>
-          <select 
-            name="region"
-            className="w-full bg-slate-900 border border-slate-800 rounded-2xl px-5 py-4 text-sm outline-none cursor-pointer text-white appearance-none"
-          >
-            <option value="Local">Local Data Center</option>
-            <option value="Cloud">Public Cloud (AWS)</option>
-            <option value="Edge">Edge Node</option>
-          </select>
-        </div>
-        
-        <button 
-          type="submit"
-          className="w-full mt-4 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-[0_10px_30px_rgba(37,99,235,0.2)] transition-all active:scale-95"
-        >
-          Authorize Connection
-        </button>
-      </form>
-    </div>
-  </div>
-);
+
 
 const CustomScrollbarStyles = () => (
   <style>{`
