@@ -11,9 +11,9 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o ark-deploy ./cmd/api
 
-FROM alpine:latest
+FROM alpine:3.20
 
-RUN apk --no-cache add ca-certificates wget
+RUN apk --no-cache add ca-certificates docker-cli docker-cli-compose
 
 WORKDIR /root/
 
