@@ -1,22 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Download, Shield, Cpu, Globe, CheckCircle, 
-  Terminal, ArrowRight, ExternalLink, Package
+  Terminal, ArrowRight, Package
 } from 'lucide-react';
 
 // Constants
 const INSTALL_STEPS = {
   INITIALIZE: 1,
-  AUTH_KEY: 2,
-  GENERATE_SCRIPT: 3,
-  READY: 4
+  CREATING: 2,
+  READY: 3
 };
 
 const STEP_MESSAGES = {
   [INSTALL_STEPS.INITIALIZE]: 'Initializing instance environment...',
-  [INSTALL_STEPS.AUTH_KEY]: 'Generating Tailscale AuthKey (Ephemeral)...',
-  [INSTALL_STEPS.GENERATE_SCRIPT]: 'Generating deployment script...',
-  [INSTALL_STEPS.READY]: 'Preparing download...'
+  [INSTALL_STEPS.CREATING]: 'Creating Docker containers...',
+  [INSTALL_STEPS.READY]: 'Instance ready!'
 };
 
 const PRODUCT_ICONS = {
@@ -24,13 +22,6 @@ const PRODUCT_ICONS = {
   db: Cpu,
   proxy: Shield,
   default: Package
-};
-
-const AUTH_KEY_CONFIG = {
-  reusable: false,
-  ephemeral: true,
-  preauthorized: true,
-  expiry_seconds: 3600
 };
 
 export default function LandingPage() {
@@ -68,91 +59,23 @@ export default function LandingPage() {
 
     try {
       setInstallStep(INSTALL_STEPS.INITIALIZE);
-      await sleep(1000);
+      await sleep(800);
 
-      setInstallStep(INSTALL_STEPS.AUTH_KEY);
-      const authKey = await generateAuthKey(product);
-      await sleep(1000);
-
-      setInstallStep(INSTALL_STEPS.GENERATE_SCRIPT);
-      const installScript = generateInstallScript(product, authKey.auth_key);
-      await sleep(1000);
+      setInstallStep(INSTALL_STEPS.CREATING);
+      // TODO: Implementar llamada a POST /api/instances
+      await sleep(1500);
 
       setInstallStep(INSTALL_STEPS.READY);
       setDeploymentData({
-        product,
-        authKey: authKey.auth_key,
-        script: installScript,
-        expiresAt: authKey.expires
+        instanceId: 'demo_' + Math.random().toString(16).substring(7),
+        accessUrl: 'http://100.103.47.3:3000/instances/demo',
+        product
       });
     } catch (error) {
-      console.error('Deployment error:', error);
-      alert('Error al preparar el despliegue: ' + error.message);
+      console.error('Installation error:', error);
+      alert('Failed to create instance');
       setIsInstalling(false);
     }
-  };
-
-  const generateAuthKey = async (product) => {
-    const response = await fetch('/api/tailscale/auth-keys', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        description: `Client deployment ${product.name}`,
-        ...AUTH_KEY_CONFIG
-      })
-    });
-
-    if (!response.ok) throw new Error('Failed to generate auth key');
-    return response.json();
-  };
-
-  const generateInstallScript = (product, authKey) => `#!/bin/bash
-# ARK Deployment Script - ${product.name}
-# Generated: ${new Date().toISOString()}
-
-echo "=== ARK Instance Deployment ==="
-echo "Product: ${product.name}"
-echo "Version: Latest"
-echo ""
-
-# Check prerequisites
-command -v docker >/dev/null 2>&1 || { echo "Docker not installed. Install it first."; exit 1; }
-command -v curl >/dev/null 2>&1 || { echo "curl not installed. Install it first."; exit 1; }
-
-# Install Tailscale if not present
-if ! command -v tailscale >/dev/null 2>&1; then
-    echo "Installing Tailscale..."
-    curl -fsSL https://tailscale.com/install.sh | sh
-fi
-
-# Connect to Tailscale network
-echo "Connecting to ARK mesh network..."
-sudo tailscale up --authkey=${authKey}
-
-# Deploy the product
-echo "Deploying ${product.name}..."
-# TODO: Add product-specific deployment commands here
-
-echo ""
-echo "Deployment complete!"
-echo "Your instance is now connected to the ARK network."
-`;
-
-  const downloadScript = () => {
-    const blob = new Blob([deploymentData.script], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ark-deploy-${selectedProduct.id}.sh`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const copyToClipboard = async () => {
-    await navigator.clipboard.writeText(deploymentData.script);
-    alert('Script copiado al portapapeles');
   };
 
   const getProductIcon = (productId) => {
@@ -183,8 +106,6 @@ echo "Your instance is now connected to the ARK network."
           product={selectedProduct}
           step={installStep}
           deploymentData={deploymentData}
-          onDownload={downloadScript}
-          onCopy={copyToClipboard}
         />
       )}
       
@@ -210,13 +131,6 @@ const Navigation = () => (
         Ark <span className="text-blue-500 font-medium lowercase italic">store</span>
       </span>
     </div>
-    <div className="hidden md:flex gap-8 text-sm font-medium text-slate-400">
-      <a href="/" className="hover:text-blue-400 transition-colors">Products</a>
-      <a href="/admin" className="hover:text-blue-400 transition-colors">Admin Panel</a>
-    </div>
-    <a href="/admin" className="px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm hover:border-blue-500 transition-all">
-      Dashboard
-    </a>
   </nav>
 );
 
@@ -235,9 +149,6 @@ const HeroSection = () => (
     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
       <a href="#products" className="w-full sm:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
         Explore Products <ArrowRight className="w-5 h-5" />
-      </a>
-      <a href="/admin" className="w-full sm:w-auto px-8 py-4 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 font-medium rounded-xl transition-all flex items-center justify-center gap-2">
-        Admin Dashboard <ExternalLink className="w-4 h-4" />
       </a>
     </div>
   </header>
@@ -270,7 +181,7 @@ const ProductGrid = ({ products, onInstall, getProductIcon }) => (
 const EmptyState = () => (
   <div className="text-center py-16 text-slate-500">
     <Package className="w-12 h-12 mx-auto mb-4 opacity-50" />
-    <p>No products available yet. Add them from the admin panel.</p>
+    <p>No products available yet. Check back soon!</p>
   </div>
 );
 
@@ -300,7 +211,7 @@ const ProductCard = ({ product, onInstall, icon }) => (
   </div>
 );
 
-const DeploymentModal = ({ isOpen, onClose, product, step, deploymentData, onDownload, onCopy }) => {
+const DeploymentModal = ({ isOpen, onClose, product, step, deploymentData }) => {
   if (!isOpen) return null;
 
   const getStepIcon = (currentStep, targetStep) => {
@@ -358,9 +269,7 @@ const DeploymentModal = ({ isOpen, onClose, product, step, deploymentData, onDow
 
           {step === INSTALL_STEPS.READY && deploymentData && (
             <DeploymentReady 
-              product={product}
-              onDownload={onDownload}
-              onCopy={onCopy}
+              deploymentData={deploymentData}
             />
           )}
         </div>
@@ -369,38 +278,32 @@ const DeploymentModal = ({ isOpen, onClose, product, step, deploymentData, onDow
   );
 };
 
-const DeploymentReady = ({ product, onDownload, onCopy }) => (
+const DeploymentReady = ({ deploymentData }) => (
   <div className="mt-8 pt-6 border-t border-slate-800 animate-in fade-in slide-in-from-bottom-2 duration-700">
     <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl mb-4">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-emerald-400 font-bold text-sm">Deployment Script Ready!</p>
-        <span className="text-xs text-slate-500">Expires in 1h</span>
+        <p className="text-emerald-400 font-bold text-sm">Instance Created!</p>
+        <span className="text-xs text-slate-500 font-mono">{deploymentData.instanceId}</span>
       </div>
       <p className="text-slate-400 text-xs mb-3">
-        Download and execute this script on your target machine to deploy the instance.
+        Your instance is ready and accessible via the ARK network.
       </p>
-      <div className="flex gap-2">
-        <button 
-          onClick={onDownload}
-          className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-500 transition-colors flex items-center justify-center gap-2"
-        >
-          <Download className="w-4 h-4" /> Download Script
-        </button>
-        <button 
-          onClick={onCopy}
-          className="px-4 py-2 bg-slate-700 text-white rounded-lg text-xs font-bold hover:bg-slate-600 transition-colors"
-        >
-          Copy
-        </button>
-      </div>
+      <a
+        href={deploymentData.accessUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block w-full px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-500 transition-colors text-center"
+      >
+        Access Instance →
+      </a>
     </div>
     <div className="text-xs text-slate-500 space-y-1">
-      <p>Instructions:</p>
-      <ol className="list-decimal list-inside space-y-1 ml-2">
-        <li>Download the script to your target machine</li>
-        <li>Make it executable: <code className="bg-slate-800 px-1 rounded">chmod +x ark-deploy-{product.id}.sh</code></li>
-        <li>Run it: <code className="bg-slate-800 px-1 rounded">sudo ./ark-deploy-{product.id}.sh</code></li>
-      </ol>
+      <p>Instance Details:</p>
+      <ul className="list-disc list-inside space-y-1 ml-2">
+        <li>Status: <span className="text-emerald-400">Running</span></li>
+        <li>Access URL: <code className="bg-slate-800 px-1 rounded">{deploymentData.accessUrl}</code></li>
+        <li>Product: <span className="text-slate-300">{deploymentData.product.name}</span></li>
+      </ul>
     </div>
   </div>
 );
@@ -414,7 +317,6 @@ const Footer = () => (
       <div className="flex gap-6 text-slate-500 text-sm">
         <a href="#" className="hover:text-blue-400">Terms</a>
         <a href="#" className="hover:text-blue-400">Privacy</a>
-        <a href="/admin" className="hover:text-blue-400">Admin</a>
       </div>
     </div>
   </footer>

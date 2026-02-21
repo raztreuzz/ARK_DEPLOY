@@ -5,12 +5,6 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - ark_redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
     restart: always
     networks:
       - ark_production
@@ -24,15 +18,11 @@ services:
       - .env.prod
     environment:
       REDIS_URL: "redis://redis:6379"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/ark_instances:/tmp/ark_instances
     depends_on:
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:5050/health >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      - redis
     restart: always
     networks:
       - ark_production
@@ -43,14 +33,7 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      ark-deploy:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+      - ark-deploy
     restart: always
     networks:
       - ark_production

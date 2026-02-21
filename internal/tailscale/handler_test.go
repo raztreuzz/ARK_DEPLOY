@@ -15,7 +15,6 @@ import (
 // MockClient simula el cliente de Tailscale para testing
 type MockClient struct {
 	devices      []Device
-	authKey      *AuthKeyResponse
 	shouldError  bool
 	errorMessage string
 }
@@ -37,13 +36,6 @@ func (m *MockClient) GetDevice(deviceID string) (*Device, error) {
 		}
 	}
 	return nil, assert.AnError
-}
-
-func (m *MockClient) CreateAuthKey(description string, reusable, ephemeral, preauthorized bool, expirySeconds int, tags []string) (*AuthKeyResponse, error) {
-	if m.shouldError {
-		return nil, assert.AnError
-	}
-	return m.authKey, nil
 }
 
 func (m *MockClient) DeleteDevice(deviceID string) error {
@@ -85,22 +77,6 @@ func setupTest() (*gin.Engine, *Handler, *MockClient) {
 				BlocksInbound:   true,
 			},
 		},
-		authKey: &AuthKeyResponse{
-			ID:      "key123",
-			Key:     "tskey-auth-kXXXXXXXXXXXXXXXXX",
-			Created: time.Now(),
-			Expires: time.Now().Add(1 * time.Hour),
-			Capabilities: AuthKeyCapabilities{
-				Devices: AuthKeyDeviceCapabilities{
-					Create: AuthKeyCreate{
-						Reusable:      false,
-						Ephemeral:     false,
-						Preauthorized: true,
-					},
-				},
-			},
-		},
-		shouldError: false,
 	}
 
 	handler := &Handler{client: mockClient}
@@ -189,80 +165,6 @@ func TestGetDevice(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
-	})
-}
-
-func TestCreateAuthKey(t *testing.T) {
-	router, handler, mockClient := setupTest()
-	router.POST("/tailscale/auth-keys", handler.CreateAuthKey)
-
-	t.Run("crear auth key exitosamente", func(t *testing.T) {
-		mockClient.shouldError = false
-		
-		payload := CreateAuthKeyRequest{
-			Description:   "Test auth key",
-			Reusable:      false,
-			Ephemeral:     false,
-			Preauthorized: true,
-			ExpirySeconds: 3600,
-			Tags:          []string{"tag:test"},
-		}
-		
-		jsonData, _ := json.Marshal(payload)
-		req := httptest.NewRequest("POST", "/tailscale/auth-keys", bytes.NewBuffer(jsonData))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusCreated, w.Code)
-		
-		var response map[string]interface{}
-		err := json.Unmarshal(w.Body.Bytes(), &response)
-		assert.NoError(t, err)
-		assert.Equal(t, "tskey-auth-kXXXXXXXXXXXXXXXXX", response["auth_key"])
-		assert.Equal(t, "key123", response["id"])
-		assert.Contains(t, response["instructions"], "tailscale up --authkey=")
-	})
-
-	t.Run("crear auth key con valores por defecto", func(t *testing.T) {
-		mockClient.shouldError = false
-		
-		payload := CreateAuthKeyRequest{
-			Reusable: true,
-		}
-		
-		jsonData, _ := json.Marshal(payload)
-		req := httptest.NewRequest("POST", "/tailscale/auth-keys", bytes.NewBuffer(jsonData))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusCreated, w.Code)
-	})
-
-	t.Run("error al crear auth key", func(t *testing.T) {
-		mockClient.shouldError = true
-		
-		payload := CreateAuthKeyRequest{
-			Description: "Test",
-		}
-		
-		jsonData, _ := json.Marshal(payload)
-		req := httptest.NewRequest("POST", "/tailscale/auth-keys", bytes.NewBuffer(jsonData))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusInternalServerError, w.Code)
-	})
-
-	t.Run("JSON inválido", func(t *testing.T) {
-		req := httptest.NewRequest("POST", "/tailscale/auth-keys", bytes.NewBufferString("invalid json"))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 }
 

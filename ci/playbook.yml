@@ -13,13 +13,6 @@
           - env_file | length > 0
         fail_msg: "Falta -e env_file=... (ruta al .env.prod en Jenkins/agent)"
 
-    - name: Validar que repo_dir fue provisto
-      ansible.builtin.assert:
-        that:
-          - repo_dir is defined
-          - repo_dir | length > 0
-        fail_msg: "Falta -e repo_dir=... (ruta al workspace del repo en Jenkins/agent)"
-
     - name: Validar que compose_file fue provisto
       ansible.builtin.assert:
         that:
@@ -28,47 +21,38 @@
         fail_msg: "Falta -e compose_file=... (ruta al docker-compose.prod.yml en Jenkins/agent)"
 
   tasks:
-    - name: 1. Creando directorio del proyecto si no existe
+    - name: Crear directorio del proyecto si no existe
       ansible.builtin.file:
         path: "{{ project_path }}"
         state: directory
         mode: "0755"
 
-    - name: 2. Copiando archivo .env.prod desde Jenkins al servidor
-      ansible.posix.synchronize:
-        src: "{{ env_file }}"
-        dest: "{{ project_path }}/.env.prod"
-        delete: false
-
-    - name: 3. Sincronizando archivos del proyecto
-      ansible.posix.synchronize:
-        src: "{{ repo_dir }}/"
-        dest: "{{ project_path }}/"
-        delete: true
-        rsync_opts:
-          - "--exclude=.git"
-          - "--exclude=.idea"
-          - "--exclude=.vscode"
-          - "--exclude=node_modules"
-          - "--exclude=frontend/node_modules"
-          - "--exclude=.env"
-          - "--exclude=.env.prod"
-
-    - name: 4. Copiando docker-compose.prod.yml desde Jenkins al servidor
+    - name: Copiar docker-compose.prod.yml al servidor
       ansible.posix.synchronize:
         src: "{{ compose_file }}"
         dest: "{{ project_path }}/docker-compose.prod.yml"
         delete: false
 
-    - name: 5. Crear .env para que docker compose pueda interpolar variables
+    - name: Copiar .env.prod al servidor
+      ansible.posix.synchronize:
+        src: "{{ env_file }}"
+        dest: "{{ project_path }}/.env.prod"
+        delete: false
+
+    - name: Crear .env para interpolación de Docker Compose
       ansible.builtin.copy:
         src: "{{ project_path }}/.env.prod"
         dest: "{{ project_path }}/.env"
         remote_src: true
         mode: "0600"
 
+    - name: Crear directorio /tmp/ark_instances para instancias
+      ansible.builtin.file:
+        path: /tmp/ark_instances
+        state: directory
+        mode: "0777"
 
-    - name: 6. Levantar la infraestructura con Docker Compose
+    - name: Levantar servicios con Docker Compose
       community.docker.docker_compose_v2:
         project_src: "{{ project_path }}"
         files:

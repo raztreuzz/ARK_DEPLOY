@@ -43,6 +43,5 @@ func RegisterRoutes(r *gin.Engine, cfg config.Config, store *storage.ProductStor
 
 	r.GET("/tailscale/devices", tsHandler.ListDevices)
 	r.GET("/tailscale/devices/:id", tsHandler.GetDevice)
-	r.POST("/tailscale/auth-keys", tsHandler.CreateAuthKey)
 	r.DELETE("/tailscale/devices/:id", tsHandler.DeleteDevice)
 }
