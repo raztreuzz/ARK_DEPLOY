@@ -32,6 +32,12 @@ go run cmd/api/main.go
 
 ---
 
+## Arquitectura de Componentes
+
+![Diagrama de componentes](docs/Diagramas/Diagrama%20de%20componentes.png)
+
+---
+
 ## Estructura del Proyecto
 
 ```
