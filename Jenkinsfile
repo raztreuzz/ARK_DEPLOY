@@ -17,18 +17,28 @@ pipeline {
   }
 
   stages {
-    stage('1. Unit Tests (Go)') {
-      agent { docker { image 'golang:1.26' } }
-      steps {
-        sh '''
-          set -e
-          go version
-          go mod download
-          PKGS=$(go list ./... | grep -v '/cmd/test_api' | grep -v '/internal/tailscale')
-          go test $PKGS -v
-        '''
-      }
-    }
+stage('1. Unit Tests (Go)') {
+  agent { docker { image 'golang:1.26' } }
+  steps {
+    sh '''
+      set -e
+      go version
+
+      export GOCACHE="$PWD/.gocache"
+      export GOPATH="$PWD/.gopath"
+
+      mkdir -p "$GOCACHE" "$GOPATH"
+
+      go env -w GOCACHE="$GOCACHE"
+      go env -w GOPATH="$GOPATH"
+
+      go mod download
+
+      PKGS=$(go list ./... | grep -v '/cmd/test_api' | grep -v '/internal/tailscale')
+      go test $PKGS -v
+    '''
+  }
+}
 
     stage('2. Build & Push Images') {
       steps {
