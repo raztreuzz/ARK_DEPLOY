@@ -1,15 +1,16 @@
-# ARK Deploy - Frontend
+# ARK_DEPLOY Frontend
 
-Frontend del sistema ARK Deploy construido con React + Vite.
+Frontend React + Vite para el sistema de gestión de despliegues ARK_DEPLOY.
 
-## 🚀 Tecnologías
+## Tecnologías
 
-- **React 18** - Biblioteca de UI
-- **Vite** - Build tool y dev server
-- **Lucide React** - Iconos
-- **Tailwind CSS** - Estilos (incluidos en el código)
+- React 18 - Framework de UI
+- Vite - Herramienta de construcción y servidor de desarrollo
+- Lucide React - Iconos
+- Tailwind CSS - Estilos
+- Nginx - Servidor web de producción
 
-## 📦 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
 frontend/
@@ -17,15 +18,33 @@ frontend/
 │   ├── App.jsx          # Componente principal
 │   ├── main.jsx         # Punto de entrada
 │   └── index.css        # Estilos globales
-├── Dockerfile           # Configuración Docker multi-stage
-├── nginx.conf           # Configuración Nginx para producción
+├── Dockerfile           # Build multi-stage de Docker
+├── nginx.conf           # Configuración Nginx
 ├── vite.config.js       # Configuración Vite
 └── package.json         # Dependencias
 ```
 
-## 🐳 Ejecutar con Docker
+## Desarrollo Local
 
-### Usando Docker Compose (Recomendado)
+```bash
+# Instalar dependencias
+npm install
+
+# Servidor de desarrollo
+npm run dev
+
+# Build de producción
+npm run build
+
+# Vista previa del build
+npm run preview
+```
+
+Accede en http://localhost:3000
+
+## Docker
+
+### Usando Docker Compose
 
 Desde la raíz del proyecto:
 
@@ -33,67 +52,58 @@ Desde la raíz del proyecto:
 docker-compose up ark-frontend
 ```
 
-O para construir y ejecutar todo el stack:
+O construir todo:
 
 ```bash
 docker-compose up --build
 ```
 
-### Docker standalone
+### Docker Standalone
 
 ```bash
-# Construir imagen
+# Construir
 docker build -t ark-frontend .
 
-# Ejecutar contenedor
+# Ejecutar
 docker run -p 3000:3000 ark-frontend
 ```
 
-## 💻 Desarrollo Local (sin Docker)
+Accede en http://localhost:3000
 
-Si necesitas desarrollar localmente:
+## Integración con Backend
 
-```bash
-# Instalar dependencias
-npm install
+El frontend se comunica con la API del backend:
 
-# Ejecutar en modo desarrollo
-npm run dev
+- **Producción (Docker)**: Proxy a través de `nginx.conf` (`/api/*` -> `http://ark-deploy:5050/`)
+- **Desarrollo (Vite)**: Proxy a través de `vite.config.js`
 
-# Construir para producción
-npm run build
+El backend se ejecuta en http://localhost:5050
 
-# Preview de la build
-npm run preview
-```
+## Características
 
-## 🔗 Conexión con Backend
+- Panel de control de gestión de productos
+- Orquestación de despliegues
+- Visualización de árbol de dispositivos Tailscale
+- Logs en tiempo real
+- Interfaz responsiva
+- Build optimizado para producción
 
-El frontend se comunica con el backend a través de:
+## Imagen Docker
 
-- **Producción (Docker)**: Proxy configurado en `nginx.conf` (`/api/*` → `http://ark-deploy:5050/`)
-- **Desarrollo (Vite)**: Proxy configurado en `vite.config.js`
+Build multi-stage:
 
-## 📝 Características
+1. Builder: Node 20 Alpine - Instala dependencias, construye app
+2. Producción: Nginx Alpine - Sirve archivos optimizados
 
-- ✅ Panel de control de productos ARK
-- ✅ Gestión de despliegues
-- ✅ Visualización de nodos Tailscale
-- ✅ Logs en tiempo real
-- ✅ Interfaz responsive
-- ✅ Build optimizado para producción
+Resultado: ~25MB de imagen final
 
-## 🌐 Acceso
+## Estándares de Desarrollo
 
-Una vez ejecutado:
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:5050
+- Usa componentes funcionales
+- Importa iconos desde `lucide-react`
+- Estilos con clases Tailwind CSS
+- Llamadas API a través del prefijo `/api/*`
 
-## 🏗️ Build Multi-Stage
+---
 
-El Dockerfile utiliza una build multi-stage:
-
-1. **Builder**: Node 20 Alpine - Instala deps y construye la app
-2. **Production**: Nginx Alpine - Sirve archivos estáticos optimizados
-
-Resultado: Imagen final ~25MB (vs ~500MB con Node completo)
+**Versión**: 1.0.0 | **Última actualización**: Febrero 2026
