@@ -52,6 +52,21 @@ export default function LandingPage() {
     }
   };
 
+  const pickTargetHost = (device) => {
+    const addrs = Array.isArray(device?.addresses) ? device.addresses : [];
+    const ts = addrs.find(a => typeof a === "string" && a.startsWith("100."));
+    return ts || "";
+  };
+
+  const isDeviceAvailable = (d) => {
+    if (!d) return false;
+    if (d.online === true) return true;
+    if (d.active === true) return true;
+    if (d.status === "active") return true;
+    if (d.state === "active") return true;
+    return Array.isArray(d.addresses) && d.addresses.some(a => typeof a === "string" && a.startsWith("100."));
+  };
+
   const handleInstall = async (product) => {
     setSelectedProduct(product);
     setIsInstalling(true);
@@ -62,11 +77,20 @@ export default function LandingPage() {
 
       // Obtener un nodo disponible de Tailscale
       const devicesResponse = await fetch('/api/tailscale/devices');
+      if (!devicesResponse.ok) {
+        throw new Error(`Devices fetch failed: ${devicesResponse.status}`);
+      }
+
       const devicesData = await devicesResponse.json();
-      const availableDevice = devicesData.devices?.find(d => d.online);
+      const availableDevice = (devicesData.devices || []).find(isDeviceAvailable);
       
       if (!availableDevice) {
         throw new Error('No available devices in network');
+      }
+
+      const targetHost = pickTargetHost(availableDevice);
+      if (!targetHost) {
+        throw new Error('No Tailscale IPv4 (100.x) found for selected device');
       }
 
       setInstallStep(INSTALL_STEPS.CREATING);
@@ -77,10 +101,8 @@ export default function LandingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           product_id: product.id,
-          environment: 'prod',
-          app_name: product.name,
-          version: 'latest',
-          target_host: availableDevice.addresses?.[0] || availableDevice.name
+          environment: 'PROD',
+          target_host: targetHost
         })
       });
 

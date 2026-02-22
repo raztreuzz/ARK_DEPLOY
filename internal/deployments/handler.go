@@ -45,8 +45,8 @@ type CreateDeploymentRequest struct {
 	ProductID    string `json:"product_id"`
 	Environment  string `json:"environment"`
 	JobName      string `json:"job_name"` // Opcional, para retrocompatibilidad
-	AppName      string `json:"app_name" binding:"required"`
-	Version      string `json:"version" binding:"required"`
+	AppName      string `json:"app_name"`
+	Version      string `json:"version"`
 	TargetHost   string `json:"target_host" binding:"required"`
 	SimulateFail bool   `json:"simulate_fail"`
 }
@@ -58,38 +58,81 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
+	// Normalize and validate request
+	req.ProductID = strings.TrimSpace(req.ProductID)
+	req.Environment = strings.TrimSpace(req.Environment)
+	req.AppName = strings.TrimSpace(req.AppName)
+	req.Version = strings.TrimSpace(req.Version)
+	req.TargetHost = strings.TrimSpace(req.TargetHost)
+
+	// Determine productID (new format or legacy fallback)
+	productID := req.ProductID
+	if productID == "" {
+		productID = req.AppName
+	}
+	if productID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "product_id or app_name is required"})
+		return
+	}
+
+	// Determine environment (new format or legacy mapping)
+	env := strings.ToUpper(req.Environment)
+	if env == "" {
+		// Map version to environment
+		version := strings.ToLower(req.Version)
+		if version == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"detail": "environment or version is required"})
+			return
+		}
+		switch version {
+		case "prod", "production":
+			env = "PROD"
+		case "dev", "development":
+			env = "DEV"
+		default:
+			env = "PROD" // default fallback
+		}
+	}
+
 	client := jenkins.NewClient(h.cfg.JenkinsBaseURL, h.cfg.JenkinsUser, h.cfg.JenkinsAPIToken)
 
-	// Determinar el job_name
+	// Resolve Jenkins job from product catalog
 	var jobName string
-
-	// Opción 1: Usar product_id + environment
-	if req.ProductID != "" && req.Environment != "" {
-		product, err := h.productStore.GetByID(req.ProductID)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"detail": "product not found: " + err.Error()})
-			return
-		}
-
-		jobName = product.DeployJobs[req.Environment]
-		if jobName == "" && len(product.DeployJobs) == 0 {
-			jobName = product.Jobs[req.Environment]
-		}
-		if jobName == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "no job configured for environment: " + req.Environment})
-			return
-		}
-	} else if req.JobName != "" {
-		// Opción 2: Usar job_name directamente (retrocompatibilidad)
+	if req.JobName != "" {
+		// Direct job_name override (for advanced use)
 		jobName = req.JobName
 	} else {
-		// Opción 3: Usar el job por defecto de la configuración
-		jobName = h.cfg.JenkinsJob
+		// Fetch product and resolve job
+		product, err := h.productStore.GetByID(productID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"detail": "product not found"})
+			return
+		}
+
+		// Try deploy_jobs first, then fallback to legacy jobs field
+		jobName = product.DeployJobs[env]
+		if jobName == "" && len(product.DeployJobs) == 0 {
+			jobName = product.Jobs[env]
+		}
+		if jobName == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"detail": fmt.Sprintf("no deploy job configured for product %s in environment %s", productID, env)})
+			return
+		}
+	}
+
+	// Use normalized values for Jenkins parameters
+	appNameParam := req.AppName
+	if appNameParam == "" {
+		appNameParam = productID
+	}
+	versionParam := req.Version
+	if versionParam == "" {
+		versionParam = strings.ToLower(env)
 	}
 
 	queueURL, err := client.TriggerJobWithParams(jobName, map[string]string{
-		"APP_NAME":      req.AppName,
-		"VERSION":       req.Version,
+		"APP_NAME":      appNameParam,
+		"VERSION":       versionParam,
 		"TARGET_HOST":   req.TargetHost,
 		"SIMULATE_FAIL": boolToString(req.SimulateFail),
 	})
@@ -103,9 +146,9 @@ func (h *Handler) Create(c *gin.Context) {
 	instanceID := uuid.New().String()
 	instance := storage.Instance{
 		ID:          instanceID,
-		ProductID:   req.ProductID,
+		ProductID:   productID,
 		DeviceID:    req.TargetHost,
-		Environment: req.Environment,
+		Environment: env,
 		Status:      "provisioning",
 		URL:         fmt.Sprintf("http://%s:3000", req.TargetHost),
 		Builds:      map[string]string{jobName: strconv.Itoa(buildNumber)},

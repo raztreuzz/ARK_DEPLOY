@@ -41,8 +41,8 @@ func TestCreateDeployment_WithProduct(t *testing.T) {
 		ID:   "task-manager",
 		Name: "Task Manager",
 		DeployJobs: map[string]string{
-			"prod": "deploy-task-manager-prod",
-			"dev":  "deploy-task-manager-dev",
+			"PROD": "deploy-task-manager-prod",
+			"DEV":  "deploy-task-manager-dev",
 		},
 		DeleteJob: "delete-task-manager",
 	})
@@ -51,9 +51,7 @@ func TestCreateDeployment_WithProduct(t *testing.T) {
 	// pero valida la estructura del request
 	payload := CreateDeploymentRequest{
 		ProductID:   "task-manager",
-		Environment: "prod",
-		AppName:     "task-manager",
-		Version:     "v1.0.0",
+		Environment: "PROD",
 		TargetHost:  "server-01",
 	}
 
@@ -127,17 +125,15 @@ func TestCreateDeployment_EnvironmentNotConfigured(t *testing.T) {
 		ID:   "task-manager",
 		Name: "Task Manager",
 		DeployJobs: map[string]string{
-			"prod": "deploy-task-manager-prod",
-			"dev":  "deploy-task-manager-dev",
+			"PROD": "deploy-task-manager-prod",
+			"DEV":  "deploy-task-manager-dev",
 		},
 		DeleteJob: "delete-task-manager",
 	})
 
 	payload := CreateDeploymentRequest{
 		ProductID:   "task-manager",
-		Environment: "staging", // No existe en el producto
-		AppName:     "app",
-		Version:     "v1.0.0",
+		Environment: "STAGING", // No existe en el producto
 		TargetHost:  "server-01",
 	}
 
@@ -152,7 +148,7 @@ func TestCreateDeployment_EnvironmentNotConfigured(t *testing.T) {
 
 	var response map[string]string
 	json.Unmarshal(w.Body.Bytes(), &response)
-	assert.Contains(t, response["detail"], "no job configured for environment")
+	assert.Contains(t, response["detail"], "no deploy job configured")
 }
 
 func TestCreateDeployment_InvalidRequest(t *testing.T) {
@@ -164,24 +160,24 @@ func TestCreateDeployment_InvalidRequest(t *testing.T) {
 		payload interface{}
 	}{
 		{
-			name: "sin app_name",
+			name: "sin product_id ni app_name",
 			payload: map[string]interface{}{
-				"version":     "v1.0.0",
+				"environment": "PROD",
 				"target_host": "server-01",
 			},
 		},
 		{
-			name: "sin version",
+			name: "sin environment ni version",
 			payload: map[string]interface{}{
-				"app_name":    "app",
+				"product_id":  "test",
 				"target_host": "server-01",
 			},
 		},
 		{
 			name: "sin target_host",
 			payload: map[string]interface{}{
-				"app_name": "app",
-				"version":  "v1.0.0",
+				"product_id":  "test",
+				"environment": "PROD",
 			},
 		},
 	}
@@ -198,4 +194,70 @@ func TestCreateDeployment_InvalidRequest(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 		})
 	}
+}
+
+func TestCreateDeployment_NewFormat(t *testing.T) {
+	router, handler, store := setupDeploymentTest()
+	router.POST("/deployments", handler.Create)
+
+	// Crear un producto de prueba
+	store.Create(storage.Product{
+		ID:   "ARKCHANNEL",
+		Name: "ARK Channel",
+		DeployJobs: map[string]string{
+			"PROD": "deploy-arkchannel-prod",
+			"DEV":  "deploy-arkchannel-dev",
+		},
+		DeleteJob: "delete-arkchannel",
+	})
+
+	// Test con nuevo formato (product_id + environment)
+	payload := map[string]interface{}{
+		"product_id":  "ARKCHANNEL",
+		"environment": "PROD",
+		"target_host": "100.103.96.26",
+	}
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/deployments", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	// Sin Jenkins real, esperamos BadGateway
+	assert.Contains(t, []int{http.StatusBadGateway, http.StatusAccepted}, w.Code)
+}
+
+func TestCreateDeployment_LegacyFormat(t *testing.T) {
+	router, handler, store := setupDeploymentTest()
+	router.POST("/deployments", handler.Create)
+
+	// Crear un producto de prueba
+	store.Create(storage.Product{
+		ID:   "vault",
+		Name: "Vault",
+		DeployJobs: map[string]string{
+			"PROD": "deploy-vault-prod",
+			"DEV":  "deploy-vault-dev",
+		},
+		DeleteJob: "delete-vault",
+	})
+
+	// Test con formato legacy (app_name + version)
+	payload := map[string]interface{}{
+		"app_name":    "vault",
+		"version":     "prod",
+		"target_host": "100.103.96.26",
+	}
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/deployments", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	// Sin Jenkins real, esperamos BadGateway
+	assert.Contains(t, []int{http.StatusBadGateway, http.StatusAccepted}, w.Code)
 }
