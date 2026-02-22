@@ -101,7 +101,6 @@ func RegisterRoutes(r *gin.Engine, store RouteStore) {
 		rp.ServeHTTP(c.Writer, c.Request)
 	}
 
-	r.Any("/instances/:id", proxy)
 	r.Any("/instances/:id/*path", proxy)
 }
 
