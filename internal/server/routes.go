@@ -7,6 +7,7 @@ import (
 
 	"ark_deploy/internal/config"
 	"ark_deploy/internal/deployments"
+	"ark_deploy/internal/instances"
 	"ark_deploy/internal/products"
 	"ark_deploy/internal/storage"
 	"ark_deploy/internal/tailscale"
@@ -16,6 +17,9 @@ func RegisterRoutes(r *gin.Engine, cfg config.Config, productStore *storage.Prod
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	routeStore := storage.NewRouteStore()
+	instances.RegisterRoutes(r, routeStore)
 
 	// API group
 	api := r.Group("/api")

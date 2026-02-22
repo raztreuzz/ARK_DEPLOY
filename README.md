@@ -122,28 +122,30 @@ TAILSCALE_TAILNET=example.com
 
 ## Jenkins Jobs Configuration
 
-**⚠️ IMPORTANT**: Jenkins jobs must deploy containers **WITHOUT publishing host ports** to avoid conflicts and enable Nginx reverse proxy routing.
+**⚠️ IMPORTANT**: Product jobs must publish an ephemeral host port and register instance routing in ARK.
 
 ### Container Deployment Requirements
 
-✅ **CORRECT**: 
+✅ **CORRECT**:
+```bash
+docker run -d --name <instance_id> -p 0:80 nginx:alpine
+PORT=$(docker port <instance_id> 80/tcp | awk -F: '{print $2}' | tail -n 1)
+curl -X POST http://<ARK_BACKEND>:5050/instances/register \
+  -H "Content-Type: application/json" \
+  -d "{\"instance_id\":\"<instance_id>\",\"target_host\":\"<tailscale_ip>\",\"target_port\":$PORT}"
+```
+
+❌ **INCORRECT**:
 ```bash
 docker run -d --name <instance_id> --network ark_production nginx:alpine
 ```
 
-❌ **INCORRECT**: 
-```bash
-docker run -d -p 3000:80 --name <instance_id> nginx:alpine  # DO NOT USE -p
-```
-
 ### Architecture
 
-- Only ARK (Vault) exposes port 3000 to the outside
-- Deployed containers run on `ark_production` Docker network
-- Access via Nginx: `http://<ARK_PUBLIC_HOST>:3000/instances/<instance_id>/`
-- Use EXPOSE in Dockerfile, but never publish ports with `-p`
-
-📖 **Full documentation**: [docs/JENKINS_JOBS_REQUIREMENTS.md](docs/JENKINS_JOBS_REQUIREMENTS.md)
+- Nginx in ARK only forwards `/instances/...` to backend ARK (`:5050`)
+- Backend ARK resolves `instance_id -> target_host:target_port` from Redis
+- Upstream container keeps running on the client node, not on Vault
+- Public access remains: `http://<ARK_PUBLIC_HOST>:3000/instances/<instance_id>/`
 
 ---
 
