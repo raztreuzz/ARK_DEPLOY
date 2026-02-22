@@ -140,7 +140,7 @@ func (h *Handler) Create(c *gin.Context) {
 		"APP_NAME":      appNameParam,
 		"VERSION":       versionParam,
 		"TARGET_HOST":   req.TargetHost,
-		"ARK_CALLBACK_URL": "http://100.103.47.3:5050/instances/register",
+		"ARK_CALLBACK_URL": "http://100.103.47.3/api/instances/register",
 		"SIMULATE_FAIL": boolToString(req.SimulateFail),
 	})
 	if err != nil {
