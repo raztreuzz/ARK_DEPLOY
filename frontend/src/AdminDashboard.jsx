@@ -59,6 +59,9 @@ export default function AdminDashboard() {
   const [logsModal, setLogsModal] = useState(null);
   const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
   const [productFormError, setProductFormError] = useState('');
+  const [jobsCatalog, setJobsCatalog] = useState([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsError, setJobsError] = useState('');
   const [productForm, setProductForm] = useState({
     id: '',
     name: '',
@@ -89,6 +92,10 @@ export default function AdminDashboard() {
   const loadProducts = async () => {
     try {
       const response = await fetch('/api/products');
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail || response.statusText);
+      }
       const data = await response.json();
       if (data.products) {
         const mappedProducts = data.products.map(p => ({
@@ -104,13 +111,17 @@ export default function AdminDashboard() {
       }
     } catch (error) {
       console.error('Error loading products:', error);
-      addLog('[API] Failed to load products. Using offline mode.', LOG_TYPES.ERROR);
+      addLog(`[API] Failed to load products: ${error.message}`, LOG_TYPES.ERROR);
     }
   };
 
   const loadTailscaleDevices = async () => {
     try {
       const response = await fetch('/api/tailscale/devices');
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail || detail.error || response.statusText);
+      }
       const data = await response.json();
       if (data.devices) {
         const mappedDevices = data.devices.map(d => ({
@@ -124,13 +135,17 @@ export default function AdminDashboard() {
       }
     } catch (error) {
       console.error('Error loading Tailscale devices:', error);
-      addLog('[Tailscale] Connection failed. Check API credentials.', LOG_TYPES.ERROR);
+      addLog(`[Tailscale] Connection failed: ${error.message}`, LOG_TYPES.ERROR);
     }
   };
 
   const loadInstances = async () => {
     try {
       const response = await fetch('/api/deployments');
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail || response.statusText);
+      }
       const data = await response.json();
       if (data.instances) {
         setInstances(data.instances);
@@ -138,7 +153,27 @@ export default function AdminDashboard() {
       }
     } catch (error) {
       console.error('Error loading instances:', error);
-      addLog('[Instances] Failed to load instances.', LOG_TYPES.ERROR);
+      addLog(`[Instances] Failed to load instances: ${error.message}`, LOG_TYPES.ERROR);
+    }
+  };
+
+  const loadJobsCatalog = async () => {
+    setJobsLoading(true);
+    setJobsError('');
+    try {
+      const response = await fetch('/api/jobs');
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail || response.statusText);
+      }
+      const data = await response.json();
+      setJobsCatalog(data.jobs || []);
+    } catch (error) {
+      console.error('Error loading jobs:', error);
+      setJobsCatalog([]);
+      setJobsError(error.message || 'Failed to load jobs');
+    } finally {
+      setJobsLoading(false);
     }
   };
 
@@ -263,6 +298,7 @@ export default function AdminDashboard() {
       deployJobs: { PROD: '', DEV: '' },
       deleteJob: ''
     });
+    loadJobsCatalog();
     setIsCreateProductOpen(true);
   };
 
@@ -434,6 +470,9 @@ export default function AdminDashboard() {
         <CreateProductModal
           form={productForm}
           error={productFormError}
+          jobsCatalog={jobsCatalog}
+          jobsLoading={jobsLoading}
+          jobsError={jobsError}
           onChange={updateProductField}
           onChangeDeployJob={updateDeployJobField}
           onClose={closeCreateProduct}
@@ -973,7 +1012,17 @@ const LogsModal = ({ instanceId, productId, loading, logs, onClose }) => (
   </div>
 );
 
-const CreateProductModal = ({ form, error, onChange, onChangeDeployJob, onClose, onSubmit }) => (
+const CreateProductModal = ({
+  form,
+  error,
+  jobsCatalog,
+  jobsLoading,
+  jobsError,
+  onChange,
+  onChangeDeployJob,
+  onClose,
+  onSubmit
+}) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#020617]/90 backdrop-blur-md">
     <div className="bg-slate-950 border border-slate-800 w-full max-w-lg rounded-[2rem] shadow-[0_0_80px_rgba(59,130,246,0.15)] overflow-hidden">
       <div className="px-8 py-6 border-b border-slate-800 flex items-center justify-between">
@@ -1028,6 +1077,11 @@ const CreateProductModal = ({ form, error, onChange, onChangeDeployJob, onClose,
           <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block">
             Deploy Jobs by Environment
           </label>
+          <datalist id="jenkins-jobs">
+            {jobsCatalog.map(job => (
+              <option key={job.name} value={job.name} />
+            ))}
+          </datalist>
           <div className="grid gap-3">
             <div className="flex items-center gap-3">
               <span className="text-[10px] font-black uppercase text-slate-500 w-12">PROD</span>
@@ -1036,6 +1090,7 @@ const CreateProductModal = ({ form, error, onChange, onChangeDeployJob, onClose,
                 value={form.deployJobs.PROD}
                 onChange={(e) => onChangeDeployJob('PROD', e.target.value)}
                 placeholder="jenkins-job-prod"
+                list="jenkins-jobs"
                 className="flex-1 bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
               />
             </div>
@@ -1046,9 +1101,15 @@ const CreateProductModal = ({ form, error, onChange, onChangeDeployJob, onClose,
                 value={form.deployJobs.DEV}
                 onChange={(e) => onChangeDeployJob('DEV', e.target.value)}
                 placeholder="jenkins-job-dev"
+                list="jenkins-jobs"
                 className="flex-1 bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
               />
             </div>
+          </div>
+          <div className="text-[10px] text-slate-500">
+            {jobsLoading && 'Loading jobs from Jenkins...'}
+            {!jobsLoading && jobsError && `Jobs error: ${jobsError}`}
+            {!jobsLoading && !jobsError && jobsCatalog.length === 0 && 'No jobs found from Jenkins.'}
           </div>
         </div>
 
@@ -1061,6 +1122,7 @@ const CreateProductModal = ({ form, error, onChange, onChangeDeployJob, onClose,
             value={form.deleteJob}
             onChange={(e) => onChange('deleteJob', e.target.value)}
             placeholder="jenkins-job-delete"
+            list="jenkins-jobs"
             className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
           />
         </div>
