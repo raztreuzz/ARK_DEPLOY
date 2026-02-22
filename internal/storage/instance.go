@@ -17,7 +17,7 @@ type Instance struct {
 	Environment string            `json:"environment"`
 	Status      string            `json:"status"`
 	URL         string            `json:"url"`
-	Builds      map[string]string `json:"builds"` // jobName -> buildNumber
+	Builds      map[string]string `json:"builds"` 
 	CreatedAt   time.Time         `json:"created_at"`
 }
 

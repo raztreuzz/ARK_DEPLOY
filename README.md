@@ -23,6 +23,7 @@ go run cmd/api/main.go
 **Backend:**
 - Go 1.26
 - Framework Gin
+- UUIDs: github.com/google/uuid (IDs de instancias)
 - Docker con Alpine Linux
 
 **Infraestructura:**
