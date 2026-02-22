@@ -1,7 +1,6 @@
 package deployments
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -109,26 +108,21 @@ func (s *MockProductStore) GetByID(id string) (storage.Product, error) {
 	return p, nil
 }
 
-func setupTestRouter(productStore interface{}, instanceStore *MockInstanceStore) *gin.Engine {
+func setupTestRouter(productStore ProductStore, instanceStore InstanceStore) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 
 	cfg := config.Config{
-		Port:              "5050",
-		JenkinsBaseURL:    "http://localhost:8080",
-		JenkinsUser:       "test",
-		JenkinsAPIToken:   "test",
-		JenkinsJob:        "test-job",
-		TailscaleAPIKey:   "test",
-		TailscaleTailnet:  "test.com",
+		Port:             "5050",
+		JenkinsBaseURL:   "http://localhost:8080",
+		JenkinsUser:      "test",
+		JenkinsAPIToken:  "test",
+		JenkinsJob:       "test-job",
+		TailscaleAPIKey:  "test",
+		TailscaleTailnet: "test.com",
 	}
 
-	// Crear handler manualmente para tests
-	h := &Handler{
-		cfg:           cfg,
-		productStore:  productStore.(*storage.ProductStore),
-		instanceStore: (*storage.InstanceStore)(instanceStore), // Cast mock como storage.InstanceStore
-	}
+	h := NewHandler(cfg, productStore, instanceStore)
 
 	r.GET("/deployments", h.List)
 	r.DELETE("/deployments/:id", h.Delete)
@@ -198,12 +192,12 @@ func TestDeploymentsDelete_Success(t *testing.T) {
 
 	// Crear instancia manualmente
 	instance := storage.Instance{
-		ID:          "delete-test",
-		ProductID:   "test-product",
-		DeviceID:    "192.168.1.100",
-		Status:      "running",
-		URL:         "http://192.168.1.100:3000",
-		CreatedAt:   time.Now(),
+		ID:        "delete-test",
+		ProductID: "test-product",
+		DeviceID:  "192.168.1.100",
+		Status:    "running",
+		URL:       "http://192.168.1.100:3000",
+		CreatedAt: time.Now(),
 	}
 	instanceStore.Create(instance)
 

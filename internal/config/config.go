@@ -6,13 +6,13 @@ import (
 )
 
 type Config struct {
-	Port              string
-	JenkinsBaseURL    string
-	JenkinsUser       string
-	JenkinsAPIToken   string
-	JenkinsJob        string
-	TailscaleAPIKey   string
-	TailscaleTailnet  string
+	Port             string
+	JenkinsBaseURL   string
+	JenkinsUser      string
+	JenkinsAPIToken  string
+	JenkinsJob       string
+	TailscaleAPIKey  string
+	TailscaleTailnet string
 }
 
 func Load() (Config, error) {

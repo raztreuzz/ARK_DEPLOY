@@ -29,7 +29,7 @@ type DevicesResponse struct {
 // ListDevices obtiene la lista de dispositivos conectados a la red Tailscale
 func (c *Client) ListDevices() ([]Device, error) {
 	endpoint := fmt.Sprintf("/tailnet/%s/devices", c.tailnet)
-	
+
 	respBody, err := c.doRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error listing devices: %w", err)
@@ -46,7 +46,7 @@ func (c *Client) ListDevices() ([]Device, error) {
 // GetDevice obtiene información de un dispositivo específico
 func (c *Client) GetDevice(deviceID string) (*Device, error) {
 	endpoint := fmt.Sprintf("/device/%s", deviceID)
-	
+
 	respBody, err := c.doRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error getting device: %w", err)
@@ -63,7 +63,7 @@ func (c *Client) GetDevice(deviceID string) (*Device, error) {
 // DeleteDevice elimina un dispositivo de la red
 func (c *Client) DeleteDevice(deviceID string) error {
 	endpoint := fmt.Sprintf("/device/%s", deviceID)
-	
+
 	_, err := c.doRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("error deleting device: %w", err)

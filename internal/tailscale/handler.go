@@ -6,13 +6,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type ClientAPI interface {
+	ListDevices() ([]Device, error)
+	GetDevice(deviceID string) (*Device, error)
+	DeleteDevice(deviceID string) error
+}
+
 // Handler maneja las peticiones HTTP relacionadas con Tailscale
 type Handler struct {
-	client *Client
+	client ClientAPI
 }
 
 // NewHandler crea un nuevo handler de Tailscale
-func NewHandler(client *Client) *Handler {
+func NewHandler(client ClientAPI) *Handler {
 	return &Handler{
 		client: client,
 	}
@@ -23,7 +29,7 @@ func (h *Handler) ListDevices(c *gin.Context) {
 	devices, err := h.client.ListDevices()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to list devices",
+			"error":  "Failed to list devices",
 			"detail": err.Error(),
 		})
 		return
@@ -48,7 +54,7 @@ func (h *Handler) GetDevice(c *gin.Context) {
 	device, err := h.client.GetDevice(deviceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to get device",
+			"error":  "Failed to get device",
 			"detail": err.Error(),
 		})
 		return
@@ -69,14 +75,14 @@ func (h *Handler) DeleteDevice(c *gin.Context) {
 
 	if err := h.client.DeleteDevice(deviceID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to delete device",
+			"error":  "Failed to delete device",
 			"detail": err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Device deleted successfully",
+		"message":   "Device deleted successfully",
 		"device_id": deviceID,
 	})
 }

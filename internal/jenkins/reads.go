@@ -145,7 +145,7 @@ func (c *Client) ReadBuildNumberByQueueID(jobName string, queueID int) (int, err
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			
+
 		}
 	}(resp.Body)
 
@@ -209,9 +209,9 @@ func (c *Client) ReadQueueItems() ([]QueueItemInfo, error) {
 
 	var data struct {
 		Items []struct {
-			ID      int  `json:"id"`
-			Blocked bool `json:"blocked"`
-			Stuck   bool `json:"stuck"`
+			ID      int    `json:"id"`
+			Blocked bool   `json:"blocked"`
+			Stuck   bool   `json:"stuck"`
 			Why     string `json:"why"`
 			Task    struct {
 				Name string `json:"name"`

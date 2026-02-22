@@ -8,11 +8,22 @@ import (
 	"ark_deploy/internal/storage"
 )
 
-type Handler struct {
-	store *storage.ProductStore
+type Store interface {
+	Create(p storage.Product) error
+	GetAll() []storage.Product
+	GetByID(id string) (storage.Product, error)
+	Update(id string, p storage.Product) error
+	Delete(id string) error
 }
 
-func NewHandler(store *storage.ProductStore) *Handler {
+type Handler struct {
+	store Store
+}
+
+func NewHandler(store Store) *Handler {
+	if store == nil {
+		store = storage.NewProductStore()
+	}
 	return &Handler{store: store}
 }
 

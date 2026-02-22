@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"testing"
-	"time"
 )
 
 const baseURL = "http://localhost:5050"
@@ -27,7 +25,7 @@ func TestHealthCheck(t *testing.T) {
 
 	var result map[string]interface{}
 	json.NewDecoder(resp.Body).Decode(&result)
-	
+
 	if status, ok := result["status"].(string); !ok || status != "ok" {
 		t.Errorf("Status incorrecto: %v", result)
 	}
@@ -52,13 +50,13 @@ func TestListDevices(t *testing.T) {
 		Devices []map[string]interface{} `json:"devices"`
 		Count   int                      `json:"count"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("Error al decodificar respuesta: %v", err)
 	}
 
 	t.Logf("✓ Dispositivos encontrados: %d", result.Count)
-	
+
 	for i, device := range result.Devices {
 		name := device["name"].(string)
 		online := device["online"].(bool)
@@ -79,15 +77,15 @@ func TestGetDevice(t *testing.T) {
 		Devices []map[string]interface{} `json:"devices"`
 		Count   int                      `json:"count"`
 	}
-	
+
 	json.NewDecoder(resp.Body).Decode(&listResult)
-	
+
 	if listResult.Count == 0 {
 		t.Skip("No hay dispositivos para probar")
 	}
 
 	deviceID := listResult.Devices[0]["id"].(string)
-	
+
 	// Ahora obtenemos el dispositivo específico
 	resp2, err := http.Get(baseURL + "/tailscale/devices/" + deviceID)
 	if err != nil {
@@ -123,12 +121,17 @@ func TestGetNonExistentDevice(t *testing.T) {
 
 // TestMain es el punto de entrada de los tests
 func TestMain(m *testing.M) {
+	if os.Getenv("RUN_INTEGRATION_TESTS") != "1" {
+		fmt.Println("Skipping integration tests (set RUN_INTEGRATION_TESTS=1 to enable).")
+		os.Exit(0)
+	}
+
 	fmt.Println("==========================================")
 	fmt.Println("  ARK_DEPLOY - TAILSCALE INTEGRATION TESTS")
 	fmt.Println("==========================================")
 	fmt.Println()
 	fmt.Println("Verificando que el servidor esté corriendo...")
-	
+
 	// Verificar que el servidor esté disponible
 	resp, err := http.Get(baseURL + "/health")
 	if err != nil {
@@ -140,10 +143,10 @@ func TestMain(m *testing.M) {
 
 	fmt.Println("✓ Servidor disponible")
 	fmt.Println()
-	
+
 	// Ejecutar tests
 	code := m.Run()
-	
+
 	fmt.Println()
 	fmt.Println("==========================================")
 	if code == 0 {
@@ -152,6 +155,6 @@ func TestMain(m *testing.M) {
 		fmt.Println("  ✗ ALGUNOS TESTS FALLARON")
 	}
 	fmt.Println("==========================================")
-	
+
 	os.Exit(code)
 }

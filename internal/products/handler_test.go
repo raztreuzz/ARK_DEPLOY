@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -13,9 +14,74 @@ import (
 	"ark_deploy/internal/storage"
 )
 
+type mockProductStore struct {
+	mu       sync.RWMutex
+	products map[string]storage.Product
+}
+
+func newMockProductStore() *mockProductStore {
+	return &mockProductStore{products: make(map[string]storage.Product)}
+}
+
+func (s *mockProductStore) Create(p storage.Product) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.products[p.ID]; exists {
+		return assert.AnError
+	}
+	s.products[p.ID] = p
+	return nil
+}
+
+func (s *mockProductStore) GetAll() []storage.Product {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]storage.Product, 0, len(s.products))
+	for _, p := range s.products {
+		result = append(result, p)
+	}
+	return result
+}
+
+func (s *mockProductStore) GetByID(id string) (storage.Product, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	p, exists := s.products[id]
+	if !exists {
+		return storage.Product{}, assert.AnError
+	}
+	return p, nil
+}
+
+func (s *mockProductStore) Update(id string, p storage.Product) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.products[id]; !exists {
+		return assert.AnError
+	}
+	p.ID = id
+	s.products[id] = p
+	return nil
+}
+
+func (s *mockProductStore) Delete(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.products[id]; !exists {
+		return assert.AnError
+	}
+	delete(s.products, id)
+	return nil
+}
+
 func setupTest() (*gin.Engine, *Handler) {
 	gin.SetMode(gin.TestMode)
-	store := storage.NewProductStore()
+	store := newMockProductStore()
 	handler := NewHandler(store)
 	router := gin.New()
 	return router, handler
@@ -114,14 +180,14 @@ func TestListProducts(t *testing.T) {
 
 	// Crear algunos productos primero
 	handler.store.Create(storage.Product{
-		ID:   "prod-1",
-		Name: "Product 1",
+		ID:         "prod-1",
+		Name:       "Product 1",
 		DeployJobs: map[string]string{"PROD": "job-1"},
 		DeleteJob:  "delete-job-1",
 	})
 	handler.store.Create(storage.Product{
-		ID:   "prod-2",
-		Name: "Product 2",
+		ID:         "prod-2",
+		Name:       "Product 2",
 		DeployJobs: map[string]string{"PROD": "job-2"},
 		DeleteJob:  "delete-job-2",
 	})
@@ -199,8 +265,8 @@ func TestUpdateProduct(t *testing.T) {
 
 	// Crear un producto
 	handler.store.Create(storage.Product{
-		ID:   "task-manager",
-		Name: "Task Manager Old",
+		ID:         "task-manager",
+		Name:       "Task Manager Old",
 		DeployJobs: map[string]string{"PROD": "old-job"},
 		DeleteJob:  "delete-task-manager",
 	})
@@ -237,8 +303,8 @@ func TestDeleteProduct(t *testing.T) {
 
 	// Crear un producto
 	handler.store.Create(storage.Product{
-		ID:   "task-manager",
-		Name: "Task Manager",
+		ID:         "task-manager",
+		Name:       "Task Manager",
 		DeployJobs: map[string]string{"PROD": "job"},
 		DeleteJob:  "delete-task-manager",
 	})

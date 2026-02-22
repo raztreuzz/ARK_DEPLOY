@@ -1,7 +1,6 @@
 package tailscale
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -47,7 +46,7 @@ func (m *MockClient) DeleteDevice(deviceID string) error {
 
 func setupTest() (*gin.Engine, *Handler, *MockClient) {
 	gin.SetMode(gin.TestMode)
-	
+
 	mockClient := &MockClient{
 		devices: []Device{
 			{
@@ -79,9 +78,9 @@ func setupTest() (*gin.Engine, *Handler, *MockClient) {
 		},
 	}
 
-	handler := &Handler{client: mockClient}
+	handler := NewHandler(mockClient)
 	router := gin.New()
-	
+
 	return router, handler, mockClient
 }
 
@@ -91,21 +90,21 @@ func TestListDevices(t *testing.T) {
 
 	t.Run("listar dispositivos exitosamente", func(t *testing.T) {
 		mockClient.shouldError = false
-		
+
 		req := httptest.NewRequest("GET", "/tailscale/devices", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		
+
 		var response map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Equal(t, float64(2), response["count"])
-		
+
 		devices := response["devices"].([]interface{})
 		assert.Len(t, devices, 2)
-		
+
 		firstDevice := devices[0].(map[string]interface{})
 		assert.Equal(t, "dev001", firstDevice["id"])
 		assert.Equal(t, "server-01", firstDevice["name"])
@@ -114,13 +113,13 @@ func TestListDevices(t *testing.T) {
 
 	t.Run("error al listar dispositivos", func(t *testing.T) {
 		mockClient.shouldError = true
-		
+
 		req := httptest.NewRequest("GET", "/tailscale/devices", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
-		
+
 		var response map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -134,13 +133,13 @@ func TestGetDevice(t *testing.T) {
 
 	t.Run("obtener dispositivo existente", func(t *testing.T) {
 		mockClient.shouldError = false
-		
+
 		req := httptest.NewRequest("GET", "/tailscale/devices/dev001", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		
+
 		var device Device
 		err := json.Unmarshal(w.Body.Bytes(), &device)
 		assert.NoError(t, err)
@@ -151,7 +150,7 @@ func TestGetDevice(t *testing.T) {
 
 	t.Run("dispositivo no encontrado", func(t *testing.T) {
 		mockClient.shouldError = true
-		
+
 		req := httptest.NewRequest("GET", "/tailscale/devices/dev999", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
@@ -174,13 +173,13 @@ func TestDeleteDevice(t *testing.T) {
 
 	t.Run("eliminar dispositivo exitosamente", func(t *testing.T) {
 		mockClient.shouldError = false
-		
+
 		req := httptest.NewRequest("DELETE", "/tailscale/devices/dev001", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		
+
 		var response map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
@@ -190,7 +189,7 @@ func TestDeleteDevice(t *testing.T) {
 
 	t.Run("error al eliminar dispositivo", func(t *testing.T) {
 		mockClient.shouldError = true
-		
+
 		req := httptest.NewRequest("DELETE", "/tailscale/devices/dev001", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)

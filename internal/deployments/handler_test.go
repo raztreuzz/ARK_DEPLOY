@@ -14,21 +14,22 @@ import (
 	"ark_deploy/internal/storage"
 )
 
-func setupDeploymentTest() (*gin.Engine, *Handler, *storage.ProductStore) {
+func setupDeploymentTest() (*gin.Engine, *Handler, *MockProductStore) {
 	gin.SetMode(gin.TestMode)
-	
+
 	cfg := config.Config{
 		JenkinsBaseURL:  "http://jenkins-test.local",
 		JenkinsUser:     "test-user",
 		JenkinsAPIToken: "test-token",
 		JenkinsJob:      "default-job",
 	}
-	
-	store := storage.NewProductStore()
-	handler := NewHandler(cfg, store)
+
+	productStore := NewMockProductStore()
+	instanceStore := NewMockInstanceStore()
+	handler := NewHandler(cfg, productStore, instanceStore)
 	router := gin.New()
-	
-	return router, handler, store
+
+	return router, handler, productStore
 }
 
 func TestCreateDeployment_WithProduct(t *testing.T) {
@@ -39,13 +40,14 @@ func TestCreateDeployment_WithProduct(t *testing.T) {
 	store.Create(storage.Product{
 		ID:   "task-manager",
 		Name: "Task Manager",
-		Jobs: map[string]string{
+		DeployJobs: map[string]string{
 			"prod": "deploy-task-manager-prod",
 			"dev":  "deploy-task-manager-dev",
 		},
+		DeleteJob: "delete-task-manager",
 	})
 
-	// Nota: Este test fallará sin un Jenkins real o mock, 
+	// Nota: Este test fallará sin un Jenkins real o mock,
 	// pero valida la estructura del request
 	payload := CreateDeploymentRequest{
 		ProductID:   "task-manager",
@@ -110,7 +112,7 @@ func TestCreateDeployment_ProductNotFound(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
-	
+
 	var response map[string]string
 	json.Unmarshal(w.Body.Bytes(), &response)
 	assert.Contains(t, response["detail"], "product not found")
@@ -124,10 +126,11 @@ func TestCreateDeployment_EnvironmentNotConfigured(t *testing.T) {
 	store.Create(storage.Product{
 		ID:   "task-manager",
 		Name: "Task Manager",
-		Jobs: map[string]string{
+		DeployJobs: map[string]string{
 			"prod": "deploy-task-manager-prod",
 			"dev":  "deploy-task-manager-dev",
 		},
+		DeleteJob: "delete-task-manager",
 	})
 
 	payload := CreateDeploymentRequest{
@@ -146,7 +149,7 @@ func TestCreateDeployment_EnvironmentNotConfigured(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	
+
 	var response map[string]string
 	json.Unmarshal(w.Body.Bytes(), &response)
 	assert.Contains(t, response["detail"], "no job configured for environment")
