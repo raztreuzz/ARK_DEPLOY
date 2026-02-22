@@ -13,6 +13,7 @@ type Config struct {
 	JenkinsJob       string
 	TailscaleAPIKey  string
 	TailscaleTailnet string
+	ARKPublicHost    string // Public host for reverse proxy URLs (e.g., "100.103.47.3:3000")
 }
 
 func Load() (Config, error) {
@@ -24,6 +25,7 @@ func Load() (Config, error) {
 		JenkinsJob:       os.Getenv("JENKINS_JOB"),
 		TailscaleAPIKey:  os.Getenv("TAILSCALE_API_KEY"),
 		TailscaleTailnet: os.Getenv("TAILSCALE_TAILNET"),
+		ARKPublicHost:    os.Getenv("ARK_PUBLIC_HOST"), // Optional: defaults to request host
 	}
 
 	if cfg.Port == "" {

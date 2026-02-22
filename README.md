@@ -84,6 +84,7 @@ cp .env.example .env
 
 ```bash
 ARK_PORT=5050
+ARK_PUBLIC_HOST=100.103.47.3:3000    # Public host for reverse proxy URLs (optional)
 JENKINS_BASE_URL=http://jenkins.example.com:8080
 JENKINS_USER=admin
 JENKINS_API_TOKEN=tu_token
@@ -116,6 +117,33 @@ TAILSCALE_TAILNET=example.com
 | Jenkins | `/jobs` | GET | Implementado |
 | Tailscale | `/tailscale/devices` | GET | Implementado |
 | Tailscale | `/tailscale/devices/:id` | DELETE | Parcial |
+
+---
+
+## Jenkins Jobs Configuration
+
+**⚠️ IMPORTANT**: Jenkins jobs must deploy containers **WITHOUT publishing host ports** to avoid conflicts and enable Nginx reverse proxy routing.
+
+### Container Deployment Requirements
+
+✅ **CORRECT**: 
+```bash
+docker run -d --name <instance_id> --network ark_production nginx:alpine
+```
+
+❌ **INCORRECT**: 
+```bash
+docker run -d -p 3000:80 --name <instance_id> nginx:alpine  # DO NOT USE -p
+```
+
+### Architecture
+
+- Only ARK (Vault) exposes port 3000 to the outside
+- Deployed containers run on `ark_production` Docker network
+- Access via Nginx: `http://<ARK_PUBLIC_HOST>:3000/instances/<instance_id>/`
+- Use EXPOSE in Dockerfile, but never publish ports with `-p`
+
+📖 **Full documentation**: [docs/JENKINS_JOBS_REQUIREMENTS.md](docs/JENKINS_JOBS_REQUIREMENTS.md)
 
 ---
 

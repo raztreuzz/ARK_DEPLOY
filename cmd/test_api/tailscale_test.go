@@ -30,7 +30,7 @@ func TestHealthCheck(t *testing.T) {
 		t.Errorf("Status incorrecto: %v", result)
 	}
 
-	t.Log("✓ Health check OK")
+	t.Log("[PASS] Health check OK")
 }
 
 // TestListDevices prueba listar dispositivos de Tailscale
@@ -55,7 +55,7 @@ func TestListDevices(t *testing.T) {
 		t.Fatalf("Error al decodificar respuesta: %v", err)
 	}
 
-	t.Logf("✓ Dispositivos encontrados: %d", result.Count)
+	t.Logf("[PASS] Dispositivos encontrados: %d", result.Count)
 
 	for i, device := range result.Devices {
 		name := device["name"].(string)
@@ -101,7 +101,7 @@ func TestGetDevice(t *testing.T) {
 	var device map[string]interface{}
 	json.NewDecoder(resp2.Body).Decode(&device)
 
-	t.Logf("✓ Dispositivo obtenido: %s (ID: %s)", device["name"], device["id"])
+	t.Logf("[PASS] Dispositivo obtenido: %s (ID: %s)", device["name"], device["id"])
 }
 
 // TestGetNonExistentDevice prueba obtener un dispositivo que no existe
@@ -116,7 +116,7 @@ func TestGetNonExistentDevice(t *testing.T) {
 		t.Error("Debería fallar al buscar dispositivo inexistente")
 	}
 
-	t.Log("✓ Correctamente rechaza dispositivo inexistente")
+	t.Log("[PASS] Correctamente rechaza dispositivo inexistente")
 }
 
 // TestMain es el punto de entrada de los tests
@@ -135,13 +135,13 @@ func TestMain(m *testing.M) {
 	// Verificar que el servidor esté disponible
 	resp, err := http.Get(baseURL + "/health")
 	if err != nil {
-		fmt.Printf("❌ Error: El servidor no está disponible en %s\n", baseURL)
+		fmt.Printf("[ERROR] El servidor no está disponible en %s\n", baseURL)
 		fmt.Println("   Inicia el servidor con: go run cmd/api/main.go")
 		os.Exit(1)
 	}
 	resp.Body.Close()
 
-	fmt.Println("✓ Servidor disponible")
+	fmt.Println("[OK] Servidor disponible")
 	fmt.Println()
 
 	// Ejecutar tests
@@ -150,9 +150,9 @@ func TestMain(m *testing.M) {
 	fmt.Println()
 	fmt.Println("==========================================")
 	if code == 0 {
-		fmt.Println("  ✓ TODOS LOS TESTS PASARON")
+		fmt.Println("  [PASS] TODOS LOS TESTS PASARON")
 	} else {
-		fmt.Println("  ✗ ALGUNOS TESTS FALLARON")
+		fmt.Println("  [FAIL] ALGUNOS TESTS FALLARON")
 	}
 	fmt.Println("==========================================")
 

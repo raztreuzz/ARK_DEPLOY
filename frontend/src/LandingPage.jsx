@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Download, Shield, Cpu, Globe, CheckCircle, 
-  Terminal, ArrowRight, Package, ExternalLink
+  Terminal, ArrowRight, Package, ExternalLink, X
 } from 'lucide-react';
 
 // Constants
@@ -283,7 +283,9 @@ const DeploymentModal = ({ isOpen, onClose, product, step, deploymentData }) => 
             <Terminal className="w-4 h-4 text-blue-400" />
             <span className="text-sm font-mono text-slate-300">ark_deployment_orchestrator</span>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white">✕</button>
+          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
         </div>
         
         <div className="p-8">
@@ -327,7 +329,10 @@ const DeploymentReady = ({ deploymentData }) => (
   <div className="mt-8 pt-6 border-t border-slate-800 animate-in fade-in slide-in-from-bottom-2 duration-700">
     <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-xl mb-6">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-emerald-400 font-bold text-base">🎉 Instance Deployed!</p>
+        <p className="text-emerald-400 font-bold text-base flex items-center gap-2">
+          <CheckCircle className="w-5 h-5" />
+          Instance Deployed!
+        </p>
         <span className="text-xs text-slate-400 font-mono bg-slate-800 px-2 py-1 rounded">
           ID: {deploymentData.instanceId.substring(0, 8)}...
         </span>
@@ -356,7 +361,11 @@ const DeploymentReady = ({ deploymentData }) => (
       <p className="font-bold text-slate-400">Instance Details:</p>
       <ul className="space-y-1 ml-2">
         <li>Product: <span className="text-slate-300">{deploymentData.product.name}</span></li>
-        <li>Status: <span className="text-emerald-400">●</span> Running</li>
+        <li className="flex items-center gap-2">
+          Status: <span className="text-emerald-400 flex items-center gap-1">
+            <span className="w-2 h-2 bg-emerald-400 rounded-full"></span> Running
+          </span>
+        </li>
         <li>Instance ID: <code className="bg-slate-800 px-1 rounded text-slate-300">{deploymentData.instanceId}</code></li>
       </ul>
     </div>

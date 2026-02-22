@@ -33,7 +33,7 @@ func InitRedis() error {
 		return err
 	}
 
-	log.Println("✓ Redis connected successfully")
+	log.Println("[Redis] Connected successfully")
 	return nil
 }
 

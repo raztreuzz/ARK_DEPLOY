@@ -1158,11 +1158,16 @@ const CreateProductModal = ({
             </div>
           </div>
 
-          <div className="text-[10px] text-slate-500">
+          <div className="text-[10px] text-slate-500 flex items-center gap-1">
             {jobsLoading && 'Loading jobs from Jenkins...'}
             {!jobsLoading && jobsError && 'Jobs unavailable'}
             {!jobsLoading && !jobsError && normalizedJobs.length === 0 && 'No jobs found from Jenkins.'}
-            {!jobsLoading && !jobsError && normalizedJobs.length > 0 && `✓ ${normalizedJobs.length} job(s) available`}
+            {!jobsLoading && !jobsError && normalizedJobs.length > 0 && (
+              <>
+                <CheckCircle2 size={10} className="text-emerald-500" />
+                <span>{normalizedJobs.length} job(s) available</span>
+              </>
+            )}
           </div>
         </div>
 

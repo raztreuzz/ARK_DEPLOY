@@ -130,6 +130,14 @@ func (h *Handler) Create(c *gin.Context) {
 		versionParam = strings.ToLower(env)
 	}
 
+	// IMPORTANT: Jenkins jobs must deploy containers WITHOUT publishing host ports
+	// Correct:   docker run -d --name <instance_id> --network ark_production nginx:alpine
+	// Incorrect: docker run -d -p 3000:80 --name <instance_id> nginx:alpine
+	//
+	// Containers are accessed via Nginx reverse proxy at:
+	//   http://<ARK_PUBLIC_HOST>/instances/<instance_id>/
+	//
+	// Use EXPOSE inside Dockerfile, but do NOT use -p flag in docker run.
 	queueURL, err := client.TriggerJobWithParams(jobName, map[string]string{
 		"APP_NAME":      appNameParam,
 		"VERSION":       versionParam,
@@ -144,13 +152,26 @@ func (h *Handler) Create(c *gin.Context) {
 	buildNumber, resolved := h.tryResolveBuildNumber(client, jobName, queueURL)
 
 	instanceID := uuid.New().String()
+
+	// Determine public host for reverse proxy URL
+	publicHost := h.cfg.ARKPublicHost
+	if publicHost == "" {
+		publicHost = c.Request.Host
+	}
+	if publicHost == "" {
+		publicHost = "localhost:3000"
+	}
+
+	// URL exposed via Nginx reverse proxy (path-based), not direct node access
+	instanceURL := fmt.Sprintf("http://%s/instances/%s/", publicHost, instanceID)
+
 	instance := storage.Instance{
 		ID:          instanceID,
 		ProductID:   productID,
 		DeviceID:    req.TargetHost,
 		Environment: env,
 		Status:      "provisioning",
-		URL:         fmt.Sprintf("http://%s:3000", req.TargetHost),
+		URL:         instanceURL,
 		Builds:      map[string]string{jobName: strconv.Itoa(buildNumber)},
 		CreatedAt:   time.Now(),
 	}
