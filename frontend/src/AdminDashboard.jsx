@@ -1077,11 +1077,7 @@ const CreateProductModal = ({
           <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block">
             Deploy Jobs by Environment
           </label>
-          <datalist id="jenkins-jobs">
-            {jobsCatalog.map(job => (
-              <option key={job.name} value={job.name} />
-            ))}
-          </datalist>
+          
           <div className="grid gap-3">
             <div className="flex items-center gap-3">
               <span className="text-[10px] font-black uppercase text-slate-500 w-12">PROD</span>
@@ -1106,10 +1102,18 @@ const CreateProductModal = ({
               />
             </div>
           </div>
+
+          <datalist id="jenkins-jobs">
+            {jobsCatalog.map(job => (
+              <option key={job.name} value={job.name} />
+            ))}
+          </datalist>
+
           <div className="text-[10px] text-slate-500">
-            {jobsLoading && 'Loading jobs from Jenkins...'}
-            {!jobsLoading && jobsError && `Jobs error: ${jobsError}`}
-            {!jobsLoading && !jobsError && jobsCatalog.length === 0 && 'No jobs found from Jenkins.'}
+            {jobsLoading && '⏳ Loading jobs from Jenkins...'}
+            {!jobsLoading && jobsError && `❌ Jobs error: ${jobsError}`}
+            {!jobsLoading && !jobsError && jobsCatalog.length === 0 && '⚠️ No jobs found from Jenkins.'}
+            {!jobsLoading && !jobsError && jobsCatalog.length > 0 && `✓ ${jobsCatalog.length} job(s) available`}
           </div>
         </div>
 

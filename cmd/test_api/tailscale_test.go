@@ -35,7 +35,7 @@ func TestHealthCheck(t *testing.T) {
 
 // TestListDevices prueba listar dispositivos de Tailscale
 func TestListDevices(t *testing.T) {
-	resp, err := http.Get(baseURL + "/tailscale/devices")
+	resp, err := http.Get(baseURL + "/api/tailscale/devices")
 	if err != nil {
 		t.Fatalf("Error al obtener dispositivos: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestListDevices(t *testing.T) {
 // TestGetDevice prueba obtener un dispositivo específico
 func TestGetDevice(t *testing.T) {
 	// Primero obtenemos la lista para tener un ID válido
-	resp, err := http.Get(baseURL + "/tailscale/devices")
+	resp, err := http.Get(baseURL + "/api/tailscale/devices")
 	if err != nil {
 		t.Skip("No se pudo obtener lista de dispositivos")
 	}
@@ -87,7 +87,7 @@ func TestGetDevice(t *testing.T) {
 	deviceID := listResult.Devices[0]["id"].(string)
 
 	// Ahora obtenemos el dispositivo específico
-	resp2, err := http.Get(baseURL + "/tailscale/devices/" + deviceID)
+	resp2, err := http.Get(baseURL + "/api/tailscale/devices/" + deviceID)
 	if err != nil {
 		t.Fatalf("Error al obtener dispositivo: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestGetDevice(t *testing.T) {
 
 // TestGetNonExistentDevice prueba obtener un dispositivo que no existe
 func TestGetNonExistentDevice(t *testing.T) {
-	resp, err := http.Get(baseURL + "/tailscale/devices/nonexistent123")
+	resp, err := http.Get(baseURL + "/api/tailscale/devices/nonexistent123")
 	if err != nil {
 		t.Fatalf("Error en request: %v", err)
 	}
