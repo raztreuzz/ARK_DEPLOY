@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Download, Shield, Cpu, Globe, CheckCircle, 
-  Terminal, ArrowRight, Package
+  Terminal, ArrowRight, Package, ExternalLink
 } from 'lucide-react';
 
 // Constants
@@ -59,21 +59,46 @@ export default function LandingPage() {
 
     try {
       setInstallStep(INSTALL_STEPS.INITIALIZE);
-      await sleep(800);
+
+      // Obtener un nodo disponible de Tailscale
+      const devicesResponse = await fetch('/api/tailscale/devices');
+      const devicesData = await devicesResponse.json();
+      const availableDevice = devicesData.devices?.find(d => d.online);
+      
+      if (!availableDevice) {
+        throw new Error('No available devices in network');
+      }
 
       setInstallStep(INSTALL_STEPS.CREATING);
-      // TODO: Implementar llamada a POST /api/instances
-      await sleep(1500);
+
+      // POST real a /api/deployments
+      const deployResponse = await fetch('/api/deployments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: product.id,
+          environment: 'prod',
+          app_name: product.name,
+          version: 'latest',
+          target_host: availableDevice.addresses?.[0] || availableDevice.name
+        })
+      });
+
+      if (!deployResponse.ok) {
+        throw new Error(`Deployment failed: ${deployResponse.statusText}`);
+      }
+
+      const deployData = await deployResponse.json();
 
       setInstallStep(INSTALL_STEPS.READY);
       setDeploymentData({
-        instanceId: 'demo_' + Math.random().toString(16).substring(7),
-        accessUrl: 'http://100.103.47.3:3000/instances/demo',
+        instanceId: deployData.instance_id,
+        accessUrl: deployData.url,
         product
       });
     } catch (error) {
       console.error('Installation error:', error);
-      alert('Failed to create instance');
+      alert('Failed to create instance: ' + error.message);
       setIsInstalling(false);
     }
   };
@@ -85,8 +110,6 @@ export default function LandingPage() {
     const color = colors[iconKey] || colors.default;
     return <IconComponent className={`w-6 h-6 ${color}`} />;
   };
-
-  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30">
@@ -196,7 +219,7 @@ const ProductCard = ({ product, onInstall, icon }) => (
     </div>
     <p className="text-slate-400 text-sm leading-relaxed mb-6">{product.description}</p>
     <div className="flex flex-wrap gap-2 mb-8">
-      {Object.keys(product.jobs).map(env => (
+      {Object.keys(product.deploy_jobs || product.jobs || {}).map(env => (
         <span key={env} className="text-[10px] uppercase tracking-wider font-bold text-slate-500 border border-slate-800 px-2 py-0.5 rounded">
           {env}
         </span>
@@ -280,29 +303,39 @@ const DeploymentModal = ({ isOpen, onClose, product, step, deploymentData }) => 
 
 const DeploymentReady = ({ deploymentData }) => (
   <div className="mt-8 pt-6 border-t border-slate-800 animate-in fade-in slide-in-from-bottom-2 duration-700">
-    <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl mb-4">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-emerald-400 font-bold text-sm">Instance Created!</p>
-        <span className="text-xs text-slate-500 font-mono">{deploymentData.instanceId}</span>
+    <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-xl mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-emerald-400 font-bold text-base">🎉 Instance Deployed!</p>
+        <span className="text-xs text-slate-400 font-mono bg-slate-800 px-2 py-1 rounded">
+          ID: {deploymentData.instanceId.substring(0, 8)}...
+        </span>
       </div>
-      <p className="text-slate-400 text-xs mb-3">
-        Your instance is ready and accessible via the ARK network.
+      <p className="text-slate-400 text-sm mb-4">
+        Your {deploymentData.product.name} instance is running and ready to use.
       </p>
+      
+      <div className="bg-slate-800/50 border border-slate-700 p-3 rounded-lg mb-4">
+        <p className="text-xs text-slate-500 mb-1">Access URL:</p>
+        <p className="text-sm font-mono text-blue-300 break-all">{deploymentData.accessUrl}</p>
+      </div>
+
       <a
         href={deploymentData.accessUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="block w-full px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-500 transition-colors text-center"
+        className="block w-full px-4 py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white rounded-lg text-sm font-bold hover:from-emerald-500 hover:to-emerald-400 transition-all shadow-lg shadow-emerald-500/20 text-center flex items-center justify-center gap-2"
       >
-        Access Instance →
+        <ExternalLink className="w-4 h-4" />
+        Open Instance in New Tab
       </a>
     </div>
-    <div className="text-xs text-slate-500 space-y-1">
-      <p>Instance Details:</p>
-      <ul className="list-disc list-inside space-y-1 ml-2">
-        <li>Status: <span className="text-emerald-400">Running</span></li>
-        <li>Access URL: <code className="bg-slate-800 px-1 rounded">{deploymentData.accessUrl}</code></li>
+
+    <div className="text-xs text-slate-500 space-y-2">
+      <p className="font-bold text-slate-400">Instance Details:</p>
+      <ul className="space-y-1 ml-2">
         <li>Product: <span className="text-slate-300">{deploymentData.product.name}</span></li>
+        <li>Status: <span className="text-emerald-400">●</span> Running</li>
+        <li>Instance ID: <code className="bg-slate-800 px-1 rounded text-slate-300">{deploymentData.instanceId}</code></li>
       </ul>
     </div>
   </div>

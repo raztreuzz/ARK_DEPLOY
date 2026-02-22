@@ -4,7 +4,7 @@ import {
   Server, Terminal, Search, ShieldCheck, Globe, 
   Cpu, Copy, Eraser, ExternalLink, Package, Tag, 
   Layers, X, ArrowRight, ShieldAlert, GitBranch, 
-  Network, Share2, Link2
+  Network, Share2, Link2, Trash2, AlertCircle, FileText, Loader
 } from 'lucide-react';
 
 // Constants
@@ -46,6 +46,7 @@ const DEFAULT_NODE_VALUES = {
 export default function AdminDashboard() {
   const [products, setProducts] = useState([]);
   const [tailscaleNodes, setTailscaleNodes] = useState([]);
+  const [instances, setInstances] = useState([]);
   const [filter, setFilter] = useState('');
   const [activeExecution, setActiveExecution] = useState(null);
   const [followLogs, setFollowLogs] = useState(true);
@@ -54,12 +55,27 @@ export default function AdminDashboard() {
   const [selectedProductForDeploy, setSelectedProductForDeploy] = useState(null);
   const [tempTargetHost, setTempTargetHost] = useState('');
   const [logs, setLogs] = useState([]);
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+  const [logsModal, setLogsModal] = useState(null);
+  const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
+  const [productFormError, setProductFormError] = useState('');
+  const [productForm, setProductForm] = useState({
+    id: '',
+    name: '',
+    description: '',
+    deployJobs: {
+      PROD: '',
+      DEV: ''
+    },
+    deleteJob: ''
+  });
 
   const logEndRef = useRef(null);
 
   useEffect(() => {
     loadProducts();
     loadTailscaleDevices();
+    loadInstances();
     addLog('[System] ARK_DEPLOY backend ready.', LOG_TYPES.SYSTEM);
     addLog('[Tailscale] Connecting to private mesh...', LOG_TYPES.SYSTEM);
   }, []);
@@ -79,7 +95,9 @@ export default function AdminDashboard() {
           ...DEFAULT_PRODUCT_VALUES,
           id: p.id,
           name: p.name,
-          description: p.description || 'No description available'
+          description: p.description || 'No description available',
+          deploy_jobs: p.deploy_jobs || p.jobs || {},
+          delete_job: p.delete_job || ''
         }));
         setProducts(mappedProducts);
         addLog(`[API] Loaded ${mappedProducts.length} product(s) from backend.`, LOG_TYPES.INFO);
@@ -107,6 +125,20 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Error loading Tailscale devices:', error);
       addLog('[Tailscale] Connection failed. Check API credentials.', LOG_TYPES.ERROR);
+    }
+  };
+
+  const loadInstances = async () => {
+    try {
+      const response = await fetch('/api/deployments');
+      const data = await response.json();
+      if (data.instances) {
+        setInstances(data.instances);
+        addLog(`[Instances] Loaded ${data.instances.length} active instance(s).`, LOG_TYPES.INFO);
+      }
+    } catch (error) {
+      console.error('Error loading instances:', error);
+      addLog('[Instances] Failed to load instances.', LOG_TYPES.ERROR);
     }
   };
 
@@ -161,7 +193,57 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteInstance = async (instanceId, deviceId, productId) => {
+    try {
+      const response = await fetch(`/api/deployments/${instanceId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
 
+      if (response.ok) {
+        setInstances(prev => prev.filter(i => i.id !== instanceId));
+        addLog(`[Instance] Removed instance ${instanceId.substring(0, 8)}... from ${deviceId}`, LOG_TYPES.INFO);
+      } else {
+        addLog(`[Error] Failed to delete instance: ${response.statusText}`, LOG_TYPES.ERROR);
+      }
+    } catch (error) {
+      console.error('Error deleting instance:', error);
+      addLog(`[Error] Network error while deleting instance.`, LOG_TYPES.ERROR);
+    } finally {
+      setDeleteConfirmation(null);
+    }
+  };
+
+  const openDeleteConfirmation = (instanceId, deviceId, productId) => {
+    setDeleteConfirmation({ instanceId, deviceId, productId });
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirmation(null);
+  };
+
+  const handleViewLogs = async (instanceId, productId) => {
+    setLogsModal({ instanceId, productId, loading: true, logs: {} });
+    try {
+      const response = await fetch(`/api/deployments/${instanceId}/logs`);
+      if (response.ok) {
+        const data = await response.json();
+        setLogsModal(prev => prev ? { ...prev, loading: false, logs: data.logs || {} } : null);
+        addLog(`[Logs] Fetched logs for instance ${instanceId.substring(0, 8)}...`, LOG_TYPES.INFO);
+      } else {
+        setLogsModal(prev => prev ? { ...prev, loading: false, logs: { error: 'Failed to fetch logs' } } : null);
+        addLog(`[Logs] Failed to fetch logs: ${response.statusText}`, LOG_TYPES.ERROR);
+      }
+    } catch (error) {
+      console.error('Error fetching logs:', error);
+      setLogsModal(prev => prev ? { ...prev, loading: false, logs: { error: error.message } } : null);
+      addLog(`[Logs] Error fetching logs: ${error.message}`, LOG_TYPES.ERROR);
+    }
+  };
+
+  const closeLogs = () => {
+    setLogsModal(null);
+  };
 
   const addLog = (msg, type = LOG_TYPES.INFO) => {
     setLogs(prev => [...prev, { 
@@ -172,11 +254,101 @@ export default function AdminDashboard() {
     }]);
   };
 
+  const openCreateProduct = () => {
+    setProductFormError('');
+    setProductForm({
+      id: '',
+      name: '',
+      description: '',
+      deployJobs: { PROD: '', DEV: '' },
+      deleteJob: ''
+    });
+    setIsCreateProductOpen(true);
+  };
+
+  const closeCreateProduct = () => {
+    setIsCreateProductOpen(false);
+  };
+
+  const updateProductField = (field, value) => {
+    setProductForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const updateDeployJobField = (env, value) => {
+    setProductForm(prev => ({
+      ...prev,
+      deployJobs: { ...prev.deployJobs, [env]: value }
+    }));
+  };
+
+  const handleCreateProduct = async () => {
+    const trimmedId = productForm.id.trim();
+    const trimmedName = productForm.name.trim();
+    const trimmedDesc = productForm.description.trim();
+    const deployJobs = Object.fromEntries(
+      Object.entries(productForm.deployJobs)
+        .map(([env, job]) => [env, job.trim()])
+        .filter(([, job]) => job.length > 0)
+    );
+    const deleteJob = productForm.deleteJob.trim();
+
+    if (!trimmedId || !trimmedName || Object.keys(deployJobs).length === 0 || !deleteJob) {
+      setProductFormError('ID, name, deploy job, and delete job are required.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: trimmedId,
+          name: trimmedName,
+          description: trimmedDesc,
+          deploy_jobs: deployJobs,
+          delete_job: deleteJob
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        const detail = errData.detail || response.statusText;
+        setProductFormError(detail || 'Failed to create product.');
+        addLog(`[Products] Create failed: ${detail}`, LOG_TYPES.ERROR);
+        return;
+      }
+
+      const created = await response.json();
+      const mappedProduct = {
+        ...DEFAULT_PRODUCT_VALUES,
+        id: created.id,
+        name: created.name,
+        description: created.description || 'No description available',
+        deploy_jobs: created.deploy_jobs || deployJobs,
+        delete_job: created.delete_job || deleteJob
+      };
+
+      setProducts(prev => [mappedProduct, ...prev]);
+      addLog(`[Products] Created ${created.name} (${created.id}).`, LOG_TYPES.INFO);
+      setIsCreateProductOpen(false);
+    } catch (error) {
+      console.error('Error creating product:', error);
+      setProductFormError(error.message || 'Network error');
+      addLog('[Products] Network error creating product.', LOG_TYPES.ERROR);
+    }
+  };
+
   const getLogColor = (type) => LOG_COLORS[type] || LOG_COLORS[LOG_TYPES.INFO];
 
   const groupedNodes = tailscaleNodes.reduce((acc, node) => {
     if (!acc[node.region]) acc[node.region] = [];
     acc[node.region].push(node);
+    return acc;
+  }, {});
+
+  const groupedInstances = instances.reduce((acc, instance) => {
+    if (!acc[instance.device_id]) acc[instance.device_id] = [];
+    acc[instance.device_id].push(instance);
     return acc;
   }, {});
 
@@ -202,7 +374,17 @@ export default function AdminDashboard() {
             filter={filter}
             onFilterChange={setFilter}
             onDeploy={openDeployModal}
+            onCreateProduct={openCreateProduct}
           />
+
+          {Object.keys(groupedInstances).length > 0 && (
+            <InstancesTreeView 
+              groupedInstances={groupedInstances}
+              onRefresh={loadInstances}
+              onDelete={openDeleteConfirmation}
+              onViewLogs={handleViewLogs}
+            />
+          )}
 
           <TailscaleTreeView groupedNodes={groupedNodes} />
         </div>
@@ -228,7 +410,36 @@ export default function AdminDashboard() {
         />
       )}
 
+      {deleteConfirmation && (
+        <DeleteConfirmationModal
+          instanceId={deleteConfirmation.instanceId}
+          deviceId={deleteConfirmation.deviceId}
+          productId={deleteConfirmation.productId}
+          onConfirm={() => handleDeleteInstance(deleteConfirmation.instanceId, deleteConfirmation.deviceId, deleteConfirmation.productId)}
+          onCancel={cancelDelete}
+        />
+      )}
 
+      {logsModal && (
+        <LogsModal
+          instanceId={logsModal.instanceId}
+          productId={logsModal.productId}
+          loading={logsModal.loading}
+          logs={logsModal.logs}
+          onClose={closeLogs}
+        />
+      )}
+
+      {isCreateProductOpen && (
+        <CreateProductModal
+          form={productForm}
+          error={productFormError}
+          onChange={updateProductField}
+          onChangeDeployJob={updateDeployJobField}
+          onClose={closeCreateProduct}
+          onSubmit={handleCreateProduct}
+        />
+      )}
 
       <CustomScrollbarStyles />
     </div>
@@ -285,21 +496,29 @@ const ActiveExecutionBanner = ({ execution }) => (
   </div>
 );
 
-const ProductCatalog = ({ products, filter, onFilterChange, onDeploy }) => (
+const ProductCatalog = ({ products, filter, onFilterChange, onDeploy, onCreateProduct }) => (
   <section className="space-y-4">
     <div className="flex items-center justify-between px-2">
       <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] flex items-center gap-2">
         <Layers size={14} className="text-blue-500" /> Deployment Units
       </h3>
-      <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
-        <input 
-          type="text" 
-          placeholder="Filter by name..."
-          className="bg-slate-900/50 border border-slate-800 rounded-xl pl-9 pr-4 py-1.5 text-xs focus:ring-1 ring-blue-500 outline-none w-48 transition-all focus:w-64 placeholder:text-slate-700 text-white"
-          value={filter}
-          onChange={(e) => onFilterChange(e.target.value)}
-        />
+      <div className="flex items-center gap-3">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+          <input 
+            type="text" 
+            placeholder="Filter by name..."
+            className="bg-slate-900/50 border border-slate-800 rounded-xl pl-9 pr-4 py-1.5 text-xs focus:ring-1 ring-blue-500 outline-none w-48 transition-all focus:w-64 placeholder:text-slate-700 text-white"
+            value={filter}
+            onChange={(e) => onFilterChange(e.target.value)}
+          />
+        </div>
+        <button
+          onClick={onCreateProduct}
+          className="px-4 py-2 bg-slate-900/60 hover:bg-blue-600 text-white text-[10px] font-black uppercase rounded-xl transition-all"
+        >
+          New Product
+        </button>
       </div>
     </div>
 
@@ -573,7 +792,303 @@ const DeployModalTargets = ({ nodes, selectedHost, onSelectHost }) => (
   </div>
 );
 
+const InstancesTreeView = ({ groupedInstances, onRefresh, onDelete, onViewLogs }) => (
+  <div className="bg-slate-800/30 border border-slate-700 rounded-lg overflow-hidden">
+    <div className="bg-slate-800/50 px-4 py-3 flex items-center justify-between border-b border-slate-700">
+      <div className="flex items-center gap-2">
+        <Server className="w-4 h-4 text-blue-400" />
+        <span className="font-bold text-sm text-slate-300">Active Instances</span>
+        <span className="text-xs text-slate-500 bg-slate-700 px-2 py-0.5 rounded-full">
+          {Object.values(groupedInstances).reduce((sum, arr) => sum + arr.length, 0)}
+        </span>
+      </div>
+      <button
+        onClick={onRefresh}
+        className="text-xs text-slate-400 hover:text-blue-400 transition-colors"
+      >
+        ↻ Refresh
+      </button>
+    </div>
 
+    <div className="divide-y divide-slate-700">
+      {Object.entries(groupedInstances).map(([deviceId, instances]) => (
+        <div key={deviceId} className="p-4">
+          <button className="flex items-center gap-2 w-full text-left hover:text-blue-400 transition-colors">
+            <Terminal className="w-4 h-4 text-slate-500" />
+            <span className="font-mono text-sm text-slate-300">{deviceId}</span>
+            <span className="text-xs text-slate-500">({instances.length})</span>
+          </button>
+
+          <div className="ml-6 mt-3 space-y-2">
+            {instances.map(instance => (
+              <div
+                key={instance.id}
+                className="bg-slate-700/30 border border-slate-600 p-3 rounded-lg text-xs space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-blue-300">{instance.product_id}</span>
+                  <div className="flex items-center gap-1">
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                      instance.status === 'running' ? 'bg-emerald-500/20 text-emerald-400' :
+                      instance.status === 'provisioning' ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-red-500/20 text-red-400'
+                    }`}>
+                      {instance.status}
+                    </span>
+                    <button
+                      onClick={() => onViewLogs(instance.id, instance.product_id)}
+                      className="p-1.5 hover:bg-blue-500/20 rounded transition-colors text-slate-400 hover:text-blue-400"
+                      title="View logs"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => onDelete(instance.id, deviceId, instance.product_id)}
+                      className="p-1.5 hover:bg-red-500/20 rounded transition-colors text-slate-400 hover:text-red-400"
+                      title="Delete instance"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="text-slate-400">
+                  Environment: <span className="text-slate-300">{instance.environment}</span>
+                </div>
+                <div className="text-slate-400 break-all">
+                  URL: <a href={instance.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">
+                    {instance.url}
+                  </a>
+                </div>
+                <div className="text-slate-500 text-[10px]">
+                  ID: {instance.id.substring(0, 12)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const DeleteConfirmationModal = ({ instanceId, deviceId, productId, onConfirm, onCancel }) => (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 max-w-sm shadow-2xl">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 bg-red-500/10 rounded-lg">
+          <AlertCircle className="w-5 h-5 text-red-400" />
+        </div>
+        <h2 className="text-lg font-bold text-red-400">Delete Instance</h2>
+      </div>
+
+      <p className="text-sm text-slate-300 mb-4">
+        Are you sure you want to delete this instance?
+        <br />
+        <span className="text-slate-400 text-xs mt-2 block">
+          Instance: <span className="font-mono text-slate-300">{instanceId.substring(0, 12)}...</span>
+          <br />
+          Device: <span className="font-mono text-slate-300">{deviceId}</span>
+          <br />
+          Product: <span className="font-mono text-slate-300">{productId}</span>
+        </span>
+      </p>
+
+      <p className="text-xs text-slate-500 mb-6">
+        This action <span className="text-red-400 font-bold">cannot be undone</span>.
+      </p>
+
+      <div className="flex gap-3">
+        <button
+          onClick={onCancel}
+          className="flex-1 px-4 py-2 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg text-sm font-medium transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onConfirm}
+          className="flex-1 px-4 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-600/50 text-red-400 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+        >
+          <Trash2 className="w-4 h-4" />
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+const LogsModal = ({ instanceId, productId, loading, logs, onClose }) => (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="bg-slate-900 border border-slate-700 rounded-lg w-full max-w-2xl max-h-[80vh] shadow-2xl flex flex-col">
+      <div className="bg-slate-800/50 px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-500/10 rounded-lg">
+            <FileText className="w-5 h-5 text-blue-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-300">Build Logs</h2>
+            <p className="text-xs text-slate-500">Product: <span className="font-mono">{productId}</span></p>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-2 hover:bg-slate-700 rounded transition-colors text-slate-400"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-auto bg-slate-950 p-4 font-mono text-xs">
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="flex flex-col items-center gap-2">
+              <Loader className="w-5 h-5 text-blue-400 animate-spin" />
+              <span className="text-slate-400">Fetching logs...</span>
+            </div>
+          </div>
+        ) : Object.keys(logs).length === 0 ? (
+          <div className="text-slate-500 text-center py-8">No logs available</div>
+        ) : (
+          Object.entries(logs).map(([jobName, logContent]) => (
+            <div key={jobName} className="mb-6">
+              <div className="bg-slate-800/50 px-3 py-2 rounded border border-slate-700 mb-2">
+                <span className="text-cyan-400 font-bold">Job: {jobName}</span>
+              </div>
+              <div className="bg-slate-950 border border-slate-800 rounded p-3 text-slate-300 whitespace-pre-wrap break-words max-h-64 overflow-y-auto">
+                {typeof logContent === 'string' ? logContent : JSON.stringify(logContent, null, 2)}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="bg-slate-800/50 px-6 py-3 border-t border-slate-700 flex justify-end">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg text-sm font-medium transition-colors"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+const CreateProductModal = ({ form, error, onChange, onChangeDeployJob, onClose, onSubmit }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#020617]/90 backdrop-blur-md">
+    <div className="bg-slate-950 border border-slate-800 w-full max-w-lg rounded-[2rem] shadow-[0_0_80px_rgba(59,130,246,0.15)] overflow-hidden">
+      <div className="px-8 py-6 border-b border-slate-800 flex items-center justify-between">
+        <h2 className="font-black uppercase tracking-[0.2em] text-xs flex items-center gap-3">
+          <Package size={18} className="text-blue-500" /> New Product
+        </h2>
+        <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
+          <X size={24} />
+        </button>
+      </div>
+
+      <div className="p-8 space-y-6">
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block">
+            Product ID
+          </label>
+          <input
+            type="text"
+            value={form.id}
+            onChange={(e) => onChange('id', e.target.value)}
+            placeholder="e.g. media-service"
+            className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block">
+            Name
+          </label>
+          <input
+            type="text"
+            value={form.name}
+            onChange={(e) => onChange('name', e.target.value)}
+            placeholder="Product name"
+            className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block">
+            Description
+          </label>
+          <textarea
+            value={form.description}
+            onChange={(e) => onChange('description', e.target.value)}
+            placeholder="Short description"
+            className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none min-h-[90px]"
+          />
+        </div>
+
+        <div className="space-y-3">
+          <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block">
+            Deploy Jobs by Environment
+          </label>
+          <div className="grid gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black uppercase text-slate-500 w-12">PROD</span>
+              <input
+                type="text"
+                value={form.deployJobs.PROD}
+                onChange={(e) => onChangeDeployJob('PROD', e.target.value)}
+                placeholder="jenkins-job-prod"
+                className="flex-1 bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black uppercase text-slate-500 w-12">DEV</span>
+              <input
+                type="text"
+                value={form.deployJobs.DEV}
+                onChange={(e) => onChangeDeployJob('DEV', e.target.value)}
+                placeholder="jenkins-job-dev"
+                className="flex-1 bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block">
+            Delete Job (Admin Only)
+          </label>
+          <input
+            type="text"
+            value={form.deleteJob}
+            onChange={(e) => onChange('deleteJob', e.target.value)}
+            placeholder="jenkins-job-delete"
+            className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
+          />
+        </div>
+
+        {error && (
+          <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+            {error}
+          </div>
+        )}
+      </div>
+
+      <div className="p-8 bg-black/40 border-t border-slate-800 flex gap-4">
+        <button 
+          onClick={onClose}
+          className="flex-1 px-6 py-4 bg-slate-900 hover:bg-slate-800 rounded-2xl text-[11px] font-black uppercase transition-all tracking-widest text-slate-500"
+        >
+          Cancel
+        </button>
+        <button 
+          onClick={onSubmit}
+          className="flex-[2] px-6 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-[11px] font-black uppercase transition-all shadow-[0_15px_40px_rgba(37,99,235,0.3)] flex items-center justify-center gap-3 tracking-[0.2em]"
+        >
+          Create Product
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 const CustomScrollbarStyles = () => (
   <style>{`

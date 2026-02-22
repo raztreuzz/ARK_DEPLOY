@@ -1,11 +1,14 @@
 package deployments
 
 import (
+	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gin-gonic/gin"
 
 	"ark_deploy/internal/config"
@@ -14,14 +17,16 @@ import (
 )
 
 type Handler struct {
-	cfg   config.Config
-	store *storage.ProductStore
+	cfg            config.Config
+	productStore   *storage.ProductStore
+	instanceStore  *storage.InstanceStore
 }
 
-func NewHandler(cfg config.Config, store *storage.ProductStore) *Handler {
+func NewHandler(cfg config.Config, productStore *storage.ProductStore, instanceStore *storage.InstanceStore) *Handler {
 	return &Handler{
-		cfg:   cfg,
-		store: store,
+		cfg:           cfg,
+		productStore:  productStore,
+		instanceStore: instanceStore,
 	}
 }
 
@@ -49,13 +54,16 @@ func (h *Handler) Create(c *gin.Context) {
 	
 	// Opción 1: Usar product_id + environment
 	if req.ProductID != "" && req.Environment != "" {
-		product, err := h.store.GetByID(req.ProductID)
+		product, err := h.productStore.GetByID(req.ProductID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"detail": "product not found: " + err.Error()})
 			return
 		}
 		
-		jobName = product.Jobs[req.Environment]
+		jobName = product.DeployJobs[req.Environment]
+		if jobName == "" && len(product.DeployJobs) == 0 {
+			jobName = product.Jobs[req.Environment]
+		}
 		if jobName == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"detail": "no job configured for environment: " + req.Environment})
 			return
@@ -81,8 +89,27 @@ func (h *Handler) Create(c *gin.Context) {
 
 	buildNumber, resolved := h.tryResolveBuildNumber(client, jobName, queueURL)
 
+	instanceID := uuid.New().String()
+	instance := storage.Instance{
+		ID:          instanceID,
+		ProductID:   req.ProductID,
+		DeviceID:    req.TargetHost,
+		Environment: req.Environment,
+		Status:      "provisioning",
+		URL:         fmt.Sprintf("http://%s:3000", req.TargetHost),
+		Builds:      map[string]string{jobName: strconv.Itoa(buildNumber)},
+		CreatedAt:   time.Now(),
+	}
+
+	if err := h.instanceStore.Create(instance); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to save instance: " + err.Error()})
+		return
+	}
+
 	if resolved {
 		c.JSON(http.StatusAccepted, gin.H{
+			"instance_id":  instanceID,
+			"url":          instance.URL,
 			"status":       "queued_resolved",
 			"job_name":     jobName,
 			"queue_url":    queueURL,
@@ -92,13 +119,91 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusAccepted, gin.H{
-		"status":    "queued",
-		"job_name":  jobName,
-		"queue_url": queueURL,
+		"instance_id": instanceID,
+		"url":         instance.URL,
+		"status":      "queued",
+		"job_name":    jobName,
+		"queue_url":   queueURL,
 	})
 }
 
-func (h *Handler) tryResolveBuildNumber(client *jenkins.Client, jobName string, queueURL string) (int, bool) {
+func (h *Handler) List(c *gin.Context) {
+	instances := h.instanceStore.GetAll()
+
+	// Ordenar por CreatedAt descendente (más nuevas primero)
+	sort.Slice(instances, func(i, j int) bool {
+		return instances[i].CreatedAt.After(instances[j].CreatedAt)
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"total":     len(instances),
+		"instances": instances,
+	})
+}
+
+func (h *Handler) Delete(c *gin.Context) {
+	instanceID := c.Param("id")
+
+	instance, err := h.instanceStore.GetByID(instanceID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"detail": "instance not found"})
+		return
+	}
+
+	// TODO: Agregar limpieza de contenedor Docker en el nodo (deviceID)
+	// Por ahora solo eliminamos del store
+
+	if err := h.instanceStore.Delete(instanceID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to delete instance: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "instance deleted",
+		"instance_id": instanceID,
+		"device_id": instance.DeviceID,
+	})
+}
+
+func (h *Handler) GetLogs(c *gin.Context) {
+	instanceID := c.Param("id")
+
+	instance, err := h.instanceStore.GetByID(instanceID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"detail": "instance not found"})
+		return
+	}
+
+	if len(instance.Builds) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"instance_id": instanceID,
+			"logs":        map[string]string{},
+		})
+		return
+	}
+
+	client := jenkins.NewClient(h.cfg.JenkinsBaseURL, h.cfg.JenkinsUser, h.cfg.JenkinsAPIToken)
+	logsMap := make(map[string]string)
+
+	for jobName, buildNumber := range instance.Builds {
+		log, err := client.GetBuildLog(jobName, buildNumber)
+		if err != nil {
+			logsMap[jobName] = fmt.Sprintf("Error fetching log: %v", err)
+		} else {
+			logsMap[jobName] = log
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"instance_id": instanceID,
+		"device_id":   instance.DeviceID,
+		"product_id":  instance.ProductID,
+		"status":      instance.Status,
+		"logs":        logsMap,
+	})
+}
+
+
 	queueID, ok := extractQueueID(queueURL)
 	if !ok {
 		return 0, false

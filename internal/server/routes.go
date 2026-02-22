@@ -12,13 +12,13 @@ import (
 	"ark_deploy/internal/tailscale"
 )
 
-func RegisterRoutes(r *gin.Engine, cfg config.Config, store *storage.ProductStore) {
+func RegisterRoutes(r *gin.Engine, cfg config.Config, productStore *storage.ProductStore, instanceStore *storage.InstanceStore) {
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	// Products
-	ph := products.NewHandler(store)
+	ph := products.NewHandler(productStore)
 	r.POST("/products", ph.Create)
 	r.GET("/products", ph.List)
 	r.GET("/products/:id", ph.Get)
@@ -26,11 +26,13 @@ func RegisterRoutes(r *gin.Engine, cfg config.Config, store *storage.ProductStor
 	r.DELETE("/products/:id", ph.Delete)
 
 	// Deployments
-	h := deployments.NewHandler(cfg, store)
+	h := deployments.NewHandler(cfg, productStore, instanceStore)
 
 	r.GET("/jobs", h.ListJobs)
-
+	r.GET("/deployments", h.List)
 	r.POST("/deployments", h.Create)
+	r.GET("/deployments/:id/logs", h.GetLogs)
+	r.DELETE("/deployments/:id", h.Delete)
 
 	r.GET("/deployments/pending", h.PendingJobs)
 	r.GET("/deployments/queue", h.QueueToBuild)

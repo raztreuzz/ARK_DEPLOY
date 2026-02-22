@@ -25,10 +25,11 @@ func main() {
 	}
 	defer redis.CloseRedis()
 
-	store := storage.NewProductStore()
+	productStore := storage.NewProductStore()
+	instanceStore := storage.NewInstanceStore()
 
 	r := gin.Default()
-	server.RegisterRoutes(r, cfg, store)
+	server.RegisterRoutes(r, cfg, productStore, instanceStore)
 
 	if err := r.Run(":" + cfg.Port); err != nil {
 		log.Fatal(err)

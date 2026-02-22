@@ -20,7 +20,9 @@ type CreateProductRequest struct {
 	ID          string            `json:"id" binding:"required"`
 	Name        string            `json:"name" binding:"required"`
 	Description string            `json:"description"`
-	Jobs        map[string]string `json:"jobs" binding:"required"`
+	DeployJobs  map[string]string `json:"deploy_jobs"`
+	DeleteJob   string            `json:"delete_job"`
+	Jobs        map[string]string `json:"jobs"`
 }
 
 func (h *Handler) Create(c *gin.Context) {
@@ -34,7 +36,21 @@ func (h *Handler) Create(c *gin.Context) {
 		ID:          req.ID,
 		Name:        req.Name,
 		Description: req.Description,
+		DeployJobs:  req.DeployJobs,
+		DeleteJob:   req.DeleteJob,
 		Jobs:        req.Jobs,
+	}
+
+	if len(product.DeployJobs) == 0 && len(product.Jobs) > 0 {
+		product.DeployJobs = product.Jobs
+	}
+	if len(product.DeployJobs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "deploy_jobs is required"})
+		return
+	}
+	if product.DeleteJob == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "delete_job is required"})
+		return
 	}
 
 	if err := h.store.Create(product); err != nil {
@@ -68,7 +84,9 @@ func (h *Handler) Get(c *gin.Context) {
 type UpdateProductRequest struct {
 	Name        string            `json:"name" binding:"required"`
 	Description string            `json:"description"`
-	Jobs        map[string]string `json:"jobs" binding:"required"`
+	DeployJobs  map[string]string `json:"deploy_jobs"`
+	DeleteJob   string            `json:"delete_job"`
+	Jobs        map[string]string `json:"jobs"`
 }
 
 func (h *Handler) Update(c *gin.Context) {
@@ -84,7 +102,21 @@ func (h *Handler) Update(c *gin.Context) {
 		ID:          id,
 		Name:        req.Name,
 		Description: req.Description,
+		DeployJobs:  req.DeployJobs,
+		DeleteJob:   req.DeleteJob,
 		Jobs:        req.Jobs,
+	}
+
+	if len(product.DeployJobs) == 0 && len(product.Jobs) > 0 {
+		product.DeployJobs = product.Jobs
+	}
+	if len(product.DeployJobs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "deploy_jobs is required"})
+		return
+	}
+	if product.DeleteJob == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "delete_job is required"})
+		return
 	}
 
 	if err := h.store.Update(id, product); err != nil {

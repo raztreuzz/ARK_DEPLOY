@@ -102,3 +102,30 @@ func (c *Client) TriggerJobWithParams(jobName string, params map[string]string) 
 
 	return queueURL, nil
 }
+func (c *Client) GetBuildLog(jobName string, buildNumber string) (string, error) {
+	endpoint := fmt.Sprintf("%s/job/%s/%s/consoleText", c.baseURL, url.PathEscape(jobName), buildNumber)
+
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", err
+	}
+	req.SetBasicAuth(c.user, c.token)
+
+	resp, err := c.httpc.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("failed to get build log: status=%d body=%s", resp.StatusCode, string(b))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(body), nil
+}
