@@ -1022,7 +1022,23 @@ const CreateProductModal = ({
   onChangeDeployJob,
   onClose,
   onSubmit
-}) => (
+}) => {
+  const [jobQuery, setJobQuery] = useState('');
+  const normalizedJobs = (jobsCatalog || [])
+    .map((job) => {
+      if (typeof job === 'string') {
+        return { key: job, label: job, value: job };
+      }
+      const label = job?.name || job?.id || '';
+      return { key: job?.id || job?.name || label, label, value: label };
+    })
+    .filter(job => job.label);
+
+  const filteredJobs = jobQuery.trim()
+    ? normalizedJobs.filter(job => job.label.toLowerCase().includes(jobQuery.trim().toLowerCase()))
+    : normalizedJobs;
+
+  return (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#020617]/90 backdrop-blur-md">
     <div className="bg-slate-950 border border-slate-800 w-full max-w-lg rounded-[2rem] shadow-[0_0_80px_rgba(59,130,246,0.15)] overflow-hidden">
       <div className="px-8 py-6 border-b border-slate-800 flex items-center justify-between">
@@ -1077,43 +1093,76 @@ const CreateProductModal = ({
           <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block">
             Deploy Jobs by Environment
           </label>
+
+          {!jobsError && normalizedJobs.length > 8 && (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" size={14} />
+              <input
+                type="text"
+                value={jobQuery}
+                onChange={(e) => setJobQuery(e.target.value)}
+                placeholder="Filter jobs"
+                className="w-full bg-slate-900/60 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
+              />
+            </div>
+          )}
           
           <div className="grid gap-3">
             <div className="flex items-center gap-3">
               <span className="text-[10px] font-black uppercase text-slate-500 w-12">PROD</span>
-              <input
-                type="text"
-                value={form.deployJobs.PROD}
-                onChange={(e) => onChangeDeployJob('PROD', e.target.value)}
-                placeholder="jenkins-job-prod"
-                list="jenkins-jobs"
-                className="flex-1 bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
-              />
+              {jobsError ? (
+                <input
+                  type="text"
+                  value={form.deployJobs.PROD}
+                  onChange={(e) => onChangeDeployJob('PROD', e.target.value)}
+                  placeholder="jenkins-job-prod"
+                  className="flex-1 bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
+                />
+              ) : (
+                <select
+                  value={form.deployJobs.PROD}
+                  onChange={(e) => onChangeDeployJob('PROD', e.target.value)}
+                  className="flex-1 bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:ring-1 ring-blue-500 outline-none"
+                  disabled={jobsLoading || normalizedJobs.length === 0}
+                >
+                  <option value="">Select job...</option>
+                  {filteredJobs.map(job => (
+                    <option key={job.key} value={job.value}>{job.label}</option>
+                  ))}
+                </select>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <span className="text-[10px] font-black uppercase text-slate-500 w-12">DEV</span>
-              <input
-                type="text"
-                value={form.deployJobs.DEV}
-                onChange={(e) => onChangeDeployJob('DEV', e.target.value)}
-                placeholder="jenkins-job-dev"
-                list="jenkins-jobs"
-                className="flex-1 bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
-              />
+              {jobsError ? (
+                <input
+                  type="text"
+                  value={form.deployJobs.DEV}
+                  onChange={(e) => onChangeDeployJob('DEV', e.target.value)}
+                  placeholder="jenkins-job-dev"
+                  className="flex-1 bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
+                />
+              ) : (
+                <select
+                  value={form.deployJobs.DEV}
+                  onChange={(e) => onChangeDeployJob('DEV', e.target.value)}
+                  className="flex-1 bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:ring-1 ring-blue-500 outline-none"
+                  disabled={jobsLoading || normalizedJobs.length === 0}
+                >
+                  <option value="">Select job...</option>
+                  {filteredJobs.map(job => (
+                    <option key={job.key} value={job.value}>{job.label}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
-          <datalist id="jenkins-jobs">
-            {jobsCatalog.map(job => (
-              <option key={job.name} value={job.name} />
-            ))}
-          </datalist>
-
           <div className="text-[10px] text-slate-500">
-            {jobsLoading && '⏳ Loading jobs from Jenkins...'}
-            {!jobsLoading && jobsError && `❌ Jobs error: ${jobsError}`}
-            {!jobsLoading && !jobsError && jobsCatalog.length === 0 && '⚠️ No jobs found from Jenkins.'}
-            {!jobsLoading && !jobsError && jobsCatalog.length > 0 && `✓ ${jobsCatalog.length} job(s) available`}
+            {jobsLoading && 'Loading jobs from Jenkins...'}
+            {!jobsLoading && jobsError && 'Jobs unavailable'}
+            {!jobsLoading && !jobsError && normalizedJobs.length === 0 && 'No jobs found from Jenkins.'}
+            {!jobsLoading && !jobsError && normalizedJobs.length > 0 && `✓ ${normalizedJobs.length} job(s) available`}
           </div>
         </div>
 
@@ -1121,14 +1170,27 @@ const CreateProductModal = ({
           <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block">
             Delete Job (Admin Only)
           </label>
-          <input
-            type="text"
-            value={form.deleteJob}
-            onChange={(e) => onChange('deleteJob', e.target.value)}
-            placeholder="jenkins-job-delete"
-            list="jenkins-jobs"
-            className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
-          />
+          {jobsError ? (
+            <input
+              type="text"
+              value={form.deleteJob}
+              onChange={(e) => onChange('deleteJob', e.target.value)}
+              placeholder="jenkins-job-delete"
+              className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white placeholder:text-slate-700 focus:ring-1 ring-blue-500 outline-none"
+            />
+          ) : (
+            <select
+              value={form.deleteJob}
+              onChange={(e) => onChange('deleteJob', e.target.value)}
+              className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:ring-1 ring-blue-500 outline-none"
+              disabled={jobsLoading || normalizedJobs.length === 0}
+            >
+              <option value="">Select job...</option>
+              {filteredJobs.map(job => (
+                <option key={job.key} value={job.value}>{job.label}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {error && (
@@ -1154,7 +1216,8 @@ const CreateProductModal = ({
       </div>
     </div>
   </div>
-);
+  );
+};
 
 const CustomScrollbarStyles = () => (
   <style>{`
