@@ -46,12 +46,6 @@
         remote_src: true
         mode: "0600"
 
-    - name: Crear directorio /tmp/ark_instances para instancias
-      ansible.builtin.file:
-        path: /tmp/ark_instances
-        state: directory
-        mode: "0777"
-
     - name: Levantar servicios con Docker Compose
       community.docker.docker_compose_v2:
         project_src: "{{ project_path }}"
