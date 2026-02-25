@@ -11,7 +11,7 @@ services:
       DB_PATH: ${DB_PATH}
       CORS_ORIGINS: ${CORS_ORIGINS}
     volumes:
-      - ${INSTANCE_ID}_data:/data
+      - data:/data
     ports:
       - "0:${API_PORT}"
 
@@ -25,4 +25,4 @@ services:
       - api
 
 volumes:
-  ${INSTANCE_ID}_data:
+   data:
