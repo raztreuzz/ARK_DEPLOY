@@ -3,7 +3,7 @@
 
   vars:
     base_dir: "/opt/ark/instances/{{ instance_id }}"
-    product_src: "products/{{ product_id }}"
+    product_src: "{{ playbook_dir }}/../products/{{ product_id }}"
     product_dst: "{{ base_dir }}/product"
 
   tasks:
