@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  api:
+    image: ghcr.io/raztreuzz/vault_go:prod
+    container_name: ${INSTANCE_ID}-api
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV}
+      PORT: ${API_PORT}
+      DB_PATH: ${DB_PATH}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+    volumes:
+      - ${INSTANCE_ID}_data:/data
+    ports:
+      - "0:${API_PORT}"
+
+  web:
+    image: ghcr.io/raztreuzz/vault_frontend:mem-enhancements
+    container_name: ${INSTANCE_ID}-web
+    restart: unless-stopped
+    ports:
+      - "0:80"
+    depends_on:
+      - api
+
+volumes:
+  ${INSTANCE_ID}_data:

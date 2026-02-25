@@ -1,0 +1,54 @@
+- hosts: ark_clients
+  gather_facts: false
+
+  vars:
+    base_dir: "/opt/ark/instances/{{ instance_id }}"
+    product_src: "products/{{ product_id }}"
+    product_dst: "{{ base_dir }}/product"
+
+  tasks:
+    - name: Ensure base directory exists
+      ansible.builtin.file:
+        path: "{{ base_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Ensure product directory exists
+      ansible.builtin.file:
+        path: "{{ product_dst }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy product template to client
+      ansible.posix.synchronize:
+        src: "{{ product_src }}/"
+        dest: "{{ product_dst }}/"
+        recursive: true
+        delete: true
+
+    - name: Write instance .env
+      ansible.builtin.copy:
+        dest: "{{ product_dst }}/.env"
+        mode: "0644"
+        content: |
+          INSTANCE_ID={{ instance_id }}
+          APP_ENV={{ env_name }}
+          API_PORT=8080
+          DB_PATH=/data/sara_memory.db
+          CORS_ORIGINS=
+
+    - name: Compose pull on client
+      ansible.builtin.shell: |
+        set -eu
+        cd "{{ product_dst }}"
+        docker compose --project-name "{{ instance_id }}" pull
+      args:
+        executable: /bin/sh
+
+    - name: Compose up on client
+      ansible.builtin.shell: |
+        set -eu
+        cd "{{ product_dst }}"
+        docker compose --project-name "{{ instance_id }}" up -d
+      args:
+        executable: /bin/sh
