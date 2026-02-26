@@ -20,6 +20,7 @@ const dbg = (...args) => console.log('[Admin]', ...args);
 function useAdminData() {
   const [products, setProducts] = useState([]);
   const [instances, setInstances] = useState([]);
+  const [devices, setDevices] = useState([]);
   const [jobsCatalog, setJobsCatalog] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -29,16 +30,19 @@ function useAdminData() {
     setError(null);
     try {
       dbg('fetchData start');
-      const [pRes, iRes] = await Promise.all([
+      const [pRes, iRes, dRes] = await Promise.all([
         fetch('/api/products').then((r) => (r.ok ? r.json() : Promise.reject('Error en productos'))),
-        fetch('/api/deployments').then((r) => (r.ok ? r.json() : Promise.reject('Error en instancias')))
+        fetch('/api/deployments').then((r) => (r.ok ? r.json() : Promise.reject('Error en instancias'))),
+        fetch('/api/tailscale/devices').then((r) => (r.ok ? r.json() : { devices: [] })).catch(() => ({ devices: [] }))
       ]);
       const jobsRes = await fetch('/api/jobs').then((r) => (r.ok ? r.json() : { jobs: [] })).catch(() => ({ jobs: [] }));
       dbg('products loaded', pRes.products?.length || 0);
       dbg('instances loaded', iRes.instances?.length || 0);
+      dbg('devices loaded', dRes.devices?.length || 0);
       dbg('jobs loaded', jobsRes.jobs?.length || 0);
       setProducts(pRes.products || []);
       setInstances(iRes.instances || []);
+      setDevices(dRes.devices || []);
       setJobsCatalog(jobsRes.jobs || []);
     } catch (err) {
       console.error('[Admin] fetchData error', err);
@@ -51,12 +55,12 @@ function useAdminData() {
 
   useEffect(() => { fetchData(); }, []);
 
-  return { products, instances, jobsCatalog, loading, error, fetchData };
+  return { products, instances, devices, jobsCatalog, loading, error, fetchData };
 }
 
 // --- COMPONENTE PRINCIPAL (Layout) ---
 export default function AdminDashboard() {
-  const { products, instances, jobsCatalog, loading, error, fetchData } = useAdminData();
+  const { products, instances, devices, jobsCatalog, loading, error, fetchData } = useAdminData();
   const [filter, setFilter] = useState('');
   const [modals, setModals] = useState({ product: null, productDelete: null, logs: null, delete: null });
 
@@ -191,6 +195,11 @@ export default function AdminDashboard() {
             onViewLogs={(id) => setModals((m) => ({ ...m, logs: id }))}
             onDelete={(inst) => setModals((m) => ({ ...m, delete: inst }))}
           />
+        </section>
+
+        <section className="space-y-4">
+          <SectionHeader title="Nodos Conectados" icon={<Globe size={18} />} />
+          <TailscaleNodesPanel devices={devices} />
         </section>
 
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -351,6 +360,38 @@ const InstanceList = ({ instances, onViewLogs, onDelete }) => (
       </div>
     ))}
     {instances.length === 0 && <div className="col-span-full py-12 border-2 border-dashed border-slate-800 rounded-3xl text-center text-slate-600 text-sm">No hay instancias activas.</div>}
+  </div>
+);
+
+const TailscaleNodesPanel = ({ devices }) => (
+  <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
+    <div className="bg-slate-800/40 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+      <span className="text-xs font-bold text-slate-300">Dispositivos de la malla</span>
+      <span className="text-[10px] text-slate-500 font-mono">{devices.length} nodo(s)</span>
+    </div>
+    <div className="divide-y divide-slate-800/60">
+      {devices.map((d, idx) => {
+        const host = d.hostname || d.name || `device-${idx + 1}`;
+        const ip = (Array.isArray(d.addresses) && d.addresses[0]) || d.ip || 'N/A';
+        const online = d.online === true || d.active === true || String(d.status || '').toLowerCase() === 'active' || String(d.state || '').toLowerCase() === 'active';
+        return (
+          <div key={`${host}-${ip}-${idx}`} className="px-4 py-3 flex items-center justify-between">
+            <div>
+              <div className="text-sm text-slate-200 font-semibold">{host}</div>
+              <div className="text-[10px] text-slate-500 font-mono">{ip}</div>
+            </div>
+            <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${online ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800 text-slate-500 border-slate-700'}`}>
+              {online ? 'Online' : 'Offline'}
+            </span>
+          </div>
+        );
+      })}
+      {devices.length === 0 && (
+        <div className="px-4 py-8 text-center text-slate-600 text-xs">
+          No se detectaron nodos conectados.
+        </div>
+      )}
+    </div>
   </div>
 );
 

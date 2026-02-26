@@ -15,6 +15,24 @@ const PRODUCT_THEMES = {
 
 const dbg = (...args) => console.log('[Landing]', ...args);
 
+const pickTargetHost = (device) => {
+  const fromAddresses = Array.isArray(device?.addresses)
+    ? device.addresses.find((a) => typeof a === 'string' && a.startsWith('100.'))
+    : '';
+  if (fromAddresses) return fromAddresses;
+  if (typeof device?.ip === 'string' && device.ip.startsWith('100.')) return device.ip;
+  if (typeof device?.target_host === 'string' && device.target_host.startsWith('100.')) return device.target_host;
+  return '';
+};
+
+const isDeviceOnline = (d) => {
+  if (!d) return false;
+  if (d.online === true || d.active === true) return true;
+  const status = String(d.status || '').toLowerCase();
+  const state = String(d.state || '').toLowerCase();
+  return status === 'active' || status === 'online' || state === 'active' || state === 'online';
+};
+
 // --- COMPONENTE PRINCIPAL ---
 export default function ArkLanding() {
   // Estados de Datos
@@ -112,11 +130,19 @@ export default function ArkLanding() {
 
     try {
       // Buscar host disponible
-      const targetDevice = devices.find((d) => d.online || d.status === 'active');
-      const targetHost = targetDevice?.addresses?.find((a) => a.startsWith('100.')) || null;
+      const targetDevice = devices.find((d) => isDeviceOnline(d) && pickTargetHost(d));
+      const targetHost = targetDevice ? pickTargetHost(targetDevice) : null;
 
       if (!targetHost) {
-        dbg('No target host from devices', devices);
+        dbg('No target host from devices', devices.map((d) => ({
+          name: d?.hostname || d?.name || 'unknown',
+          online: d?.online,
+          active: d?.active,
+          status: d?.status,
+          state: d?.state,
+          ip: d?.ip,
+          addresses: d?.addresses
+        })));
         throw new Error('No hay nodos disponibles en la red para el despliegue.');
       }
 
