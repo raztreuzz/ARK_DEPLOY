@@ -9,6 +9,7 @@ import (
 	"ark_deploy/internal/deployments"
 	"ark_deploy/internal/instances"
 	"ark_deploy/internal/products"
+	"ark_deploy/internal/sshusers"
 	"ark_deploy/internal/storage"
 	"ark_deploy/internal/tailscale"
 )
@@ -45,4 +46,9 @@ func RegisterRoutes(r *gin.Engine, cfg config.Config, productStore *storage.Prod
 	tsHandler := tailscale.NewHandler(tsClient)
 	api.GET("/tailscale/devices", tsHandler.ListDevices)
 	api.GET("/tailscale/devices/:id", tsHandler.GetDevice)
+
+	sshUserHandler := sshusers.NewHandler(storage.NewSSHUserStore())
+	api.GET("/ssh-users", sshUserHandler.List)
+	api.PUT("/ssh-users/:host", sshUserHandler.Upsert)
+	api.DELETE("/ssh-users/:host", sshUserHandler.Delete)
 }

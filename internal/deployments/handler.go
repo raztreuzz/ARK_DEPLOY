@@ -346,6 +346,13 @@ func resolveSSHUser(requestUser, targetHost string, cfg config.Config) string {
 	}
 
 	targetHost = strings.TrimSpace(targetHost)
+	if targetHost != "" {
+		store := storage.NewSSHUserStore()
+		if user, ok, err := store.Get(targetHost); err == nil && ok && strings.TrimSpace(user) != "" {
+			return strings.TrimSpace(user)
+		}
+	}
+
 	if user, ok := cfg.SSHUserMap[targetHost]; ok {
 		return strings.TrimSpace(user)
 	}

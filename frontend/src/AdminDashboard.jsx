@@ -21,6 +21,7 @@ function useAdminData() {
   const [products, setProducts] = useState([]);
   const [instances, setInstances] = useState([]);
   const [devices, setDevices] = useState([]);
+  const [sshUsers, setSSHUsers] = useState({});
   const [jobsCatalog, setJobsCatalog] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -44,13 +45,16 @@ function useAdminData() {
         const del = String(p.delete_job || '').trim();
         if (del) derivedJobs.add(del);
       });
+      const sshRes = await fetch('/api/ssh-users').then((r) => (r.ok ? r.json() : { map: {} })).catch(() => ({ map: {} }));
       dbg('products loaded', pRes.products?.length || 0);
       dbg('instances loaded', iRes.instances?.length || 0);
       dbg('devices loaded', dRes.devices?.length || 0);
       dbg('jobs loaded (derived)', derivedJobs.size);
+      dbg('ssh users loaded', Object.keys(sshRes.map || {}).length);
       setProducts(pRes.products || []);
       setInstances(iRes.instances || []);
       setDevices(dRes.devices || []);
+      setSSHUsers(sshRes.map || {});
       setJobsCatalog(Array.from(derivedJobs));
     } catch (err) {
       console.error('[Admin] fetchData error', err);
@@ -63,12 +67,12 @@ function useAdminData() {
 
   useEffect(() => { fetchData(); }, []);
 
-  return { products, instances, devices, jobsCatalog, loading, error, fetchData };
+  return { products, instances, devices, sshUsers, setSSHUsers, jobsCatalog, loading, error, fetchData };
 }
 
 // --- COMPONENTE PRINCIPAL (Layout) ---
 export default function AdminDashboard() {
-  const { products, instances, devices, jobsCatalog, loading, error, fetchData } = useAdminData();
+  const { products, instances, devices, sshUsers, setSSHUsers, jobsCatalog, loading, error, fetchData } = useAdminData();
   const [filter, setFilter] = useState('');
   const [modals, setModals] = useState({ product: null, productDelete: null, logs: null, delete: null });
 
@@ -167,6 +171,24 @@ export default function AdminDashboard() {
     await fetchData();
   };
 
+  const handleSaveNodeSSHUser = async (host, sshUser) => {
+    const normalizedHost = String(host || '').trim();
+    const normalizedUser = String(sshUser || '').trim();
+    if (!normalizedHost || !normalizedUser) {
+      throw new Error('Host y ssh_user son requeridos');
+    }
+    const res = await fetch(`/api/ssh-users/${encodeURIComponent(normalizedHost)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ssh_user: normalizedUser })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || res.statusText);
+    }
+    setSSHUsers((prev) => ({ ...prev, [normalizedHost]: normalizedUser }));
+  };
+
   if (loading && products.length === 0) return <LoadingState />;
 
   return (
@@ -207,7 +229,7 @@ export default function AdminDashboard() {
 
         <section className="space-y-4">
           <SectionHeader title="Nodos Conectados" icon={<Globe size={18} />} />
-          <TailscaleNodesPanel devices={devices} />
+          <TailscaleNodesPanel devices={devices} sshUsers={sshUsers} onSaveSSHUser={handleSaveNodeSSHUser} />
         </section>
 
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -371,52 +393,96 @@ const InstanceList = ({ instances, onViewLogs, onDelete }) => (
   </div>
 );
 
-const TailscaleNodesPanel = ({ devices }) => (
-  <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
-    <div className="bg-slate-800/40 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-      <span className="text-xs font-bold text-slate-300">Dispositivos de la malla</span>
-      <span className="text-[10px] text-slate-500 font-mono">{devices.length} nodo(s)</span>
-    </div>
-    <div className="divide-y divide-slate-800/60">
-      {devices.map((d, idx) => {
-        const host = d.hostname || d.name || `device-${idx + 1}`;
-        const normalize = (v) => String(v || '').trim().split('/')[0];
-        const ip = (Array.isArray(d.addresses) && d.addresses.length > 0 ? normalize(d.addresses[0]) : normalize(d.ip)) || 'N/A';
-        const status = String(d.status || '').toLowerCase();
-        const state = String(d.state || '').toLowerCase();
-        const hasTSIP = /^100\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip);
-        const online = d.online === true || d.active === true || status === 'active' || status === 'online' || state === 'active' || state === 'online';
-        const lastSeen = d.lastSeen ? new Date(d.lastSeen).getTime() : 0;
-        const recentlySeen = lastSeen > 0 && (Date.now() - lastSeen) < 10 * 60 * 1000;
-        const reachable = !online && hasTSIP && recentlySeen;
-        const badgeClass = online
-          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-          : reachable
-            ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
-            : 'bg-slate-800 text-slate-500 border-slate-700';
-        const badgeText = online ? 'Online' : (reachable ? 'Reachable' : 'Offline');
-        return (
-          <div key={`${host}-${ip}-${idx}`} className="px-4 py-3 flex items-center justify-between">
-            <div>
-              <div className="text-sm text-slate-200 font-semibold">{host}</div>
-              <div className="text-[10px] text-slate-500 font-mono">
-                {ip}{d.lastSeen ? ` · seen ${new Date(d.lastSeen).toLocaleTimeString()}` : ''}
+const TailscaleNodesPanel = ({ devices, sshUsers, onSaveSSHUser }) => {
+  const [draftUsers, setDraftUsers] = useState({});
+  const [savingHost, setSavingHost] = useState('');
+  const [saveError, setSaveError] = useState('');
+
+  const getDraft = (ip) => {
+    if (Object.prototype.hasOwnProperty.call(draftUsers, ip)) return draftUsers[ip];
+    return sshUsers[ip] || '';
+  };
+
+  const handleSave = async (ip) => {
+    setSavingHost(ip);
+    setSaveError('');
+    try {
+      await onSaveSSHUser(ip, getDraft(ip));
+    } catch (e) {
+      setSaveError(e.message || 'Error guardando usuario SSH');
+    } finally {
+      setSavingHost('');
+    }
+  };
+
+  return (
+    <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-slate-800/40 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <span className="text-xs font-bold text-slate-300">Dispositivos de la malla</span>
+        <span className="text-[10px] text-slate-500 font-mono">{devices.length} nodo(s)</span>
+      </div>
+      {saveError && <div className="mx-4 mt-3 text-xs text-red-400">{saveError}</div>}
+      <div className="divide-y divide-slate-800/60">
+        {devices.map((d, idx) => {
+          const host = d.hostname || d.name || `device-${idx + 1}`;
+          const normalize = (v) => String(v || '').trim().split('/')[0];
+          const ip = (Array.isArray(d.addresses) && d.addresses.length > 0 ? normalize(d.addresses[0]) : normalize(d.ip)) || 'N/A';
+          const status = String(d.status || '').toLowerCase();
+          const state = String(d.state || '').toLowerCase();
+          const hasTSIP = /^100\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip);
+          const online = d.online === true || d.active === true || status === 'active' || status === 'online' || state === 'active' || state === 'online';
+          const lastSeen = d.lastSeen ? new Date(d.lastSeen).getTime() : 0;
+          const recentlySeen = lastSeen > 0 && (Date.now() - lastSeen) < 10 * 60 * 1000;
+          const reachable = !online && hasTSIP && recentlySeen;
+          const badgeClass = online
+            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+            : reachable
+              ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+              : 'bg-slate-800 text-slate-500 border-slate-700';
+          const badgeText = online ? 'Online' : (reachable ? 'Reachable' : 'Offline');
+          return (
+            <div key={`${host}-${ip}-${idx}`} className="px-4 py-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-slate-200 font-semibold">{host}</div>
+                  <div className="text-[10px] text-slate-500 font-mono">
+                    {ip}{d.lastSeen ? ` · seen ${new Date(d.lastSeen).toLocaleTimeString()}` : ''}
+                  </div>
+                </div>
+                <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${badgeClass}`}>
+                  {badgeText}
+                </span>
               </div>
+              {hasTSIP && (
+                <div className="flex items-center gap-2">
+                  <input
+                    value={getDraft(ip)}
+                    onChange={(e) => setDraftUsers((prev) => ({ ...prev, [ip]: e.target.value }))}
+                    placeholder="ssh user (ej: SARA, ubuntu, root)"
+                    className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSave(ip)}
+                    disabled={savingHost === ip}
+                    className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
+                  >
+                    {savingHost === ip ? 'Guardando' : 'Guardar'}
+                  </button>
+                </div>
+              )}
             </div>
-            <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${badgeClass}`}>
-              {badgeText}
-            </span>
+          );
+        })}
+        {devices.length === 0 && (
+          <div className="px-4 py-8 text-center text-slate-600 text-xs">
+            No se detectaron nodos conectados.
           </div>
-        );
-      })}
-      {devices.length === 0 && (
-        <div className="px-4 py-8 text-center text-slate-600 text-xs">
-          No se detectaron nodos conectados.
-        </div>
-      )}
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // --- MODALES (FASE 1) ---
 
