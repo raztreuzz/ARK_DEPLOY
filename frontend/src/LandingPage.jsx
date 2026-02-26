@@ -164,8 +164,7 @@ export default function ArkLanding() {
       const payload = {
         product_id: product.id,
         environment: 'prod',
-        target_host: targetHost,
-        ssh_user: 'root'
+        target_host: targetHost
       };
       dbg('POST /api/deployments payload', payload);
 
@@ -201,8 +200,6 @@ export default function ArkLanding() {
     }
   };
 
-  if (loading) return <LoadingSkeleton />;
-
   const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
   const deviceOptions = devices
     .map((d) => {
@@ -227,6 +224,8 @@ export default function ArkLanding() {
     const fallback = byPreferred || byOnline || deviceOptions[0];
     if (fallback?.host) setSelectedHost(fallback.host);
   }, [deviceOptions, selectedHost, activeDeployment]);
+
+  if (loading) return <LoadingSkeleton />;
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 selection:bg-blue-500/30">

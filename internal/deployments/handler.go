@@ -48,7 +48,7 @@ type CreateDeploymentRequest struct {
 	AppName      string `json:"app_name"`
 	Version      string `json:"version"`
 	TargetHost   string `json:"target_host" binding:"required"`
-	SSHUser      string `json:"ssh_user" binding:"required"`
+	SSHUser      string `json:"ssh_user"`
 	SimulateFail bool   `json:"simulate_fail"`
 }
 
@@ -65,6 +65,11 @@ func (h *Handler) Create(c *gin.Context) {
 	req.Version = strings.TrimSpace(req.Version)
 	req.TargetHost = strings.TrimSpace(req.TargetHost)
 	req.SSHUser = strings.TrimSpace(req.SSHUser)
+	resolvedSSHUser := resolveSSHUser(req.SSHUser, req.TargetHost, h.cfg)
+	if resolvedSSHUser == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "ssh_user is required (request, ARK_SSH_USER_MAP, or ARK_DEFAULT_SSH_USER)"})
+		return
+	}
 
 	productID := req.ProductID
 	if productID == "" {
@@ -152,7 +157,7 @@ func (h *Handler) Create(c *gin.Context) {
 		"PRODUCT_ID":       productID,
 		"ENV":              env,
 		"TARGET_HOST":      req.TargetHost,
-		"SSH_USER":         req.SSHUser,
+		"SSH_USER":         resolvedSSHUser,
 		"ARK_CALLBACK_URL": callbackURL,
 		"WEB_SERVICE":      webService,
 		"WEB_PORT":         strconv.Itoa(webPort),
@@ -192,6 +197,7 @@ func (h *Handler) Create(c *gin.Context) {
 			"queue_url":    queueURL,
 			"build_number": buildNumber,
 			"target_host":  req.TargetHost,
+			"ssh_user":     resolvedSSHUser,
 		})
 		return
 	}
@@ -203,6 +209,7 @@ func (h *Handler) Create(c *gin.Context) {
 		"job_name":    jobName,
 		"queue_url":   queueURL,
 		"target_host": req.TargetHost,
+		"ssh_user":    resolvedSSHUser,
 	})
 }
 
@@ -330,4 +337,18 @@ func boolToString(v bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+func resolveSSHUser(requestUser, targetHost string, cfg config.Config) string {
+	requestUser = strings.TrimSpace(requestUser)
+	if requestUser != "" {
+		return requestUser
+	}
+
+	targetHost = strings.TrimSpace(targetHost)
+	if user, ok := cfg.SSHUserMap[targetHost]; ok {
+		return strings.TrimSpace(user)
+	}
+
+	return strings.TrimSpace(cfg.DefaultSSHUser)
 }

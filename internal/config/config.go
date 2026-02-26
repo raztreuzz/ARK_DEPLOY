@@ -17,6 +17,8 @@ type Config struct {
 	TailscaleAPIKey  string
 	TailscaleTailnet string
 	ARKPublicHost    string
+	DefaultSSHUser   string
+	SSHUserMap       map[string]string
 }
 
 func Load() (Config, error) {
@@ -29,6 +31,8 @@ func Load() (Config, error) {
 		TailscaleAPIKey:  strings.TrimSpace(os.Getenv("TAILSCALE_API_KEY")),
 		TailscaleTailnet: strings.TrimSpace(os.Getenv("TAILSCALE_TAILNET")),
 		ARKPublicHost:    strings.TrimSpace(os.Getenv("ARK_PUBLIC_HOST")),
+		DefaultSSHUser:   strings.TrimSpace(os.Getenv("ARK_DEFAULT_SSH_USER")),
+		SSHUserMap:       parseSSHUserMap(strings.TrimSpace(os.Getenv("ARK_SSH_USER_MAP"))),
 	}
 
 	if cfg.Port == "" {
@@ -76,6 +80,32 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func parseSSHUserMap(raw string) map[string]string {
+	m := make(map[string]string)
+	if raw == "" {
+		return m
+	}
+
+	pairs := strings.Split(raw, ",")
+	for _, pair := range pairs {
+		p := strings.TrimSpace(pair)
+		if p == "" {
+			continue
+		}
+		parts := strings.SplitN(p, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		host := strings.TrimSpace(parts[0])
+		user := strings.TrimSpace(parts[1])
+		if host == "" || user == "" {
+			continue
+		}
+		m[host] = user
+	}
+	return m
 }
 
 func normalizeBaseURL(raw string, envName string) (string, error) {
