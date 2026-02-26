@@ -2,67 +2,80 @@ package tailscale
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
-// Client representa un cliente HTTP para la API de Tailscale
 type Client struct {
 	baseURL    string
 	apiKey     string
 	tailnet    string
 	httpClient *http.Client
+	userAgent  string
 }
 
-// NewClient crea un nuevo cliente de Tailscale
 func NewClient(apiKey, tailnet string) *Client {
 	return &Client{
-		baseURL: "https://api.tailscale.com/api/v2",
-		apiKey:  apiKey,
-		tailnet: tailnet,
+		baseURL:   "https://api.tailscale.com/api/v2",
+		apiKey:    strings.TrimSpace(apiKey),
+		tailnet:   strings.TrimSpace(tailnet),
+		userAgent: "ark_deploy/1.0",
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
 }
 
-// doRequest ejecuta una petición HTTP con autenticación
-func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, error) {
+func (c *Client) Tailnet() string {
+	return c.tailnet
+}
+
+func (c *Client) doRequest(ctx context.Context, method, endpoint string, body any) ([]byte, int, error) {
 	var reqBody io.Reader
 	if body != nil {
-		jsonData, err := json.Marshal(body)
+		b, err := json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("error marshaling request body: %w", err)
+			return nil, 0, fmt.Errorf("tailscale: marshal body: %w", err)
 		}
-		reqBody = bytes.NewBuffer(jsonData)
+		reqBody = bytes.NewBuffer(b)
 	}
 
-	url := fmt.Sprintf("%s%s", c.baseURL, endpoint)
-	req, err := http.NewRequest(method, url, reqBody)
+	u := c.baseURL + endpoint
+	req, err := http.NewRequestWithContext(ctx, method, u, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
+		return nil, 0, fmt.Errorf("tailscale: new request %s %s: %w", method, endpoint, err)
 	}
 
 	req.SetBasicAuth(c.apiKey, "")
+	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
+	if c.userAgent != "" {
+		req.Header.Set("User-Agent", c.userAgent)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error executing request: %w", err)
+		return nil, 0, fmt.Errorf("tailscale: do %s %s: %w", method, endpoint, err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("error reading response: %w", err)
+		return nil, resp.StatusCode, fmt.Errorf("tailscale: read response %s %s: %w", method, endpoint, err)
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
+		return nil, resp.StatusCode, fmt.Errorf("tailscale: api error %s %s status=%d body=%s", method, endpoint, resp.StatusCode, string(b))
 	}
 
-	return respBody, nil
+	return b, resp.StatusCode, nil
+}
+
+func decodeJSON[T any](b []byte, out *T) error {
+	return json.Unmarshal(b, out)
 }

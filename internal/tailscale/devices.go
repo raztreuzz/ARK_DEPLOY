@@ -1,12 +1,12 @@
 package tailscale
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
-// Device representa un dispositivo en la red Tailscale
 type Device struct {
 	ID              string    `json:"id"`
 	Name            string    `json:"name"`
@@ -21,53 +21,62 @@ type Device struct {
 	BlocksInbound   bool      `json:"blocksIncomingConnections"`
 }
 
-// DevicesResponse representa la respuesta de la API al listar dispositivos
 type DevicesResponse struct {
 	Devices []Device `json:"devices"`
 }
 
-// ListDevices obtiene la lista de dispositivos conectados a la red Tailscale
 func (c *Client) ListDevices() ([]Device, error) {
 	endpoint := fmt.Sprintf("/tailnet/%s/devices", c.tailnet)
 
-	respBody, err := c.doRequest("GET", endpoint, nil)
+	b, _, err := c.doRequest(context.Background(), "GET", endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error listing devices: %w", err)
+		return nil, err
 	}
 
-	var devicesResp DevicesResponse
-	if err := json.Unmarshal(respBody, &devicesResp); err != nil {
-		return nil, fmt.Errorf("error parsing devices response: %w", err)
+	var resp DevicesResponse
+	if err := decodeJSON(b, &resp); err != nil {
+		return nil, fmt.Errorf("tailscale: decode devices response: %w", err)
 	}
 
-	return devicesResp.Devices, nil
+	return resp.Devices, nil
 }
 
-// GetDevice obtiene información de un dispositivo específico
-func (c *Client) GetDevice(deviceID string) (*Device, error) {
-	endpoint := fmt.Sprintf("/device/%s", deviceID)
+func (c *Client) FindDeviceByID(ctx context.Context, deviceID string) (*Device, error) {
+	id := strings.TrimSpace(deviceID)
+	if id == "" {
+		return nil, fmt.Errorf("tailscale: deviceID is required")
+	}
 
-	respBody, err := c.doRequest("GET", endpoint, nil)
+	devices, err := c.ListDevices()
 	if err != nil {
-		return nil, fmt.Errorf("error getting device: %w", err)
+		return nil, err
 	}
 
-	var device Device
-	if err := json.Unmarshal(respBody, &device); err != nil {
-		return nil, fmt.Errorf("error parsing device response: %w", err)
+	for i := range devices {
+		if devices[i].ID == id {
+			return &devices[i], nil
+		}
 	}
 
-	return &device, nil
+	return nil, fmt.Errorf("tailscale: device not found")
 }
 
-// DeleteDevice elimina un dispositivo de la red
-func (c *Client) DeleteDevice(deviceID string) error {
-	endpoint := fmt.Sprintf("/device/%s", deviceID)
-
-	_, err := c.doRequest("DELETE", endpoint, nil)
-	if err != nil {
-		return fmt.Errorf("error deleting device: %w", err)
+func (c *Client) FindDeviceByName(ctx context.Context, name string) (*Device, error) {
+	n := strings.TrimSpace(name)
+	if n == "" {
+		return nil, fmt.Errorf("tailscale: name is required")
 	}
 
-	return nil
+	devices, err := c.ListDevices()
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range devices {
+		if devices[i].Name == n || devices[i].Hostname == n {
+			return &devices[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("tailscale: device not found")
 }

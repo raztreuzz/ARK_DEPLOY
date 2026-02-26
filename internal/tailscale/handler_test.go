@@ -11,11 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// MockClient simula el cliente de Tailscale para testing
 type MockClient struct {
-	devices      []Device
-	shouldError  bool
-	errorMessage string
+	devices     []Device
+	shouldError bool
 }
 
 func (m *MockClient) ListDevices() ([]Device, error) {
@@ -23,25 +21,6 @@ func (m *MockClient) ListDevices() ([]Device, error) {
 		return nil, assert.AnError
 	}
 	return m.devices, nil
-}
-
-func (m *MockClient) GetDevice(deviceID string) (*Device, error) {
-	if m.shouldError {
-		return nil, assert.AnError
-	}
-	for _, d := range m.devices {
-		if d.ID == deviceID {
-			return &d, nil
-		}
-	}
-	return nil, assert.AnError
-}
-
-func (m *MockClient) DeleteDevice(deviceID string) error {
-	if m.shouldError {
-		return assert.AnError
-	}
-	return nil
 }
 
 func setupTest() (*gin.Engine, *Handler, *MockClient) {
@@ -97,18 +76,19 @@ func TestListDevices(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response map[string]interface{}
+		var response map[string]any
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
-		assert.Equal(t, float64(2), response["count"])
 
-		devices := response["devices"].([]interface{})
+		assert.Equal(t, float64(2), response["total"])
+
+		devices := response["devices"].([]any)
 		assert.Len(t, devices, 2)
 
-		firstDevice := devices[0].(map[string]interface{})
-		assert.Equal(t, "dev001", firstDevice["id"])
-		assert.Equal(t, "server-01", firstDevice["name"])
-		assert.Equal(t, true, firstDevice["online"])
+		first := devices[0].(map[string]any)
+		assert.Equal(t, "dev001", first["id"])
+		assert.Equal(t, "server-01", first["name"])
+		assert.Equal(t, true, first["online"])
 	})
 
 	t.Run("error al listar dispositivos", func(t *testing.T) {
@@ -118,12 +98,14 @@ func TestListDevices(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.Equal(t, http.StatusBadGateway, w.Code)
 
-		var response map[string]interface{}
+		var response map[string]any
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
-		assert.Contains(t, response["error"], "Failed to list devices")
+
+		_, ok := response["detail"]
+		assert.True(t, ok)
 	})
 }
 
@@ -149,56 +131,32 @@ func TestGetDevice(t *testing.T) {
 	})
 
 	t.Run("dispositivo no encontrado", func(t *testing.T) {
-		mockClient.shouldError = true
+		mockClient.shouldError = false
 
 		req := httptest.NewRequest("GET", "/tailscale/devices/dev999", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusInternalServerError, w.Code)
-	})
-
-	t.Run("sin ID de dispositivo", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/tailscale/devices/", nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
 		assert.Equal(t, http.StatusNotFound, w.Code)
-	})
-}
 
-func TestDeleteDevice(t *testing.T) {
-	router, handler, mockClient := setupTest()
-	router.DELETE("/tailscale/devices/:id", handler.DeleteDevice)
-
-	t.Run("eliminar dispositivo exitosamente", func(t *testing.T) {
-		mockClient.shouldError = false
-
-		req := httptest.NewRequest("DELETE", "/tailscale/devices/dev001", nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusOK, w.Code)
-
-		var response map[string]interface{}
+		var response map[string]any
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
-		assert.Equal(t, "Device deleted successfully", response["message"])
-		assert.Equal(t, "dev001", response["device_id"])
+		assert.Equal(t, "device not found", response["detail"])
 	})
 
-	t.Run("error al eliminar dispositivo", func(t *testing.T) {
+	t.Run("error del cliente al listar", func(t *testing.T) {
 		mockClient.shouldError = true
 
-		req := httptest.NewRequest("DELETE", "/tailscale/devices/dev001", nil)
+		req := httptest.NewRequest("GET", "/tailscale/devices/dev001", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.Equal(t, http.StatusBadGateway, w.Code)
 	})
 
-	t.Run("sin ID de dispositivo", func(t *testing.T) {
-		req := httptest.NewRequest("DELETE", "/tailscale/devices/", nil)
+	t.Run("ruta sin id (gin devuelve 404)", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/tailscale/devices/", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 

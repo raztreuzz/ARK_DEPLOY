@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"ark_deploy/internal/redis"
 )
@@ -13,9 +14,11 @@ type Product struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
 	Description string            `json:"description"`
-	DeployJobs  map[string]string `json:"deploy_jobs"` // environment -> job_name
+	DeployJobs  map[string]string `json:"deploy_jobs"`
 	DeleteJob   string            `json:"delete_job"`
-	Jobs        map[string]string `json:"jobs,omitempty"` // legacy environment -> job_name
+	WebService  string            `json:"web_service,omitempty"`
+	WebPort     int               `json:"web_port,omitempty"`
+	Jobs        map[string]string `json:"jobs,omitempty"`
 }
 
 type ProductStore struct{}
@@ -70,6 +73,7 @@ func (s *ProductStore) GetAll() []Product {
 		p = normalizeProduct(p)
 		result = append(result, p)
 	}
+
 	return result
 }
 
@@ -86,6 +90,7 @@ func (s *ProductStore) GetByID(id string) (Product, error) {
 	if err := json.Unmarshal([]byte(data), &p); err != nil {
 		return Product{}, err
 	}
+
 	return normalizeProduct(p), nil
 }
 
@@ -103,6 +108,7 @@ func (s *ProductStore) Update(id string, p Product) error {
 
 	p.ID = id
 	p = normalizeProduct(p)
+
 	data, err := json.Marshal(p)
 	if err != nil {
 		return err
@@ -130,5 +136,27 @@ func normalizeProduct(p Product) Product {
 	if len(p.DeployJobs) == 0 && len(p.Jobs) > 0 {
 		p.DeployJobs = p.Jobs
 	}
+
+	if p.DeployJobs != nil {
+		n := make(map[string]string, len(p.DeployJobs))
+		for k, v := range p.DeployJobs {
+			n[strings.TrimSpace(strings.ToLower(k))] = strings.TrimSpace(v)
+		}
+		p.DeployJobs = n
+	}
+
+	p.ID = strings.TrimSpace(p.ID)
+	p.Name = strings.TrimSpace(p.Name)
+	p.Description = strings.TrimSpace(p.Description)
+	p.DeleteJob = strings.TrimSpace(p.DeleteJob)
+	p.WebService = strings.TrimSpace(p.WebService)
+
+	if p.WebService == "" {
+		p.WebService = "web"
+	}
+	if p.WebPort == 0 {
+		p.WebPort = 80
+	}
+
 	return p
 }

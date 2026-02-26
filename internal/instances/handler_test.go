@@ -60,11 +60,19 @@ func (m *mockRouteStore) DeleteRoute(instanceID string) error {
 	return nil
 }
 
-func TestRegisterRoute_OK(t *testing.T) {
+func setupInstancesRouter(store RouteStore) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
+
+	h := NewHandler(store)
+	h.RegisterRoutes(r)
+
+	return r
+}
+
+func TestRegisterRoute_OK(t *testing.T) {
 	store := newMockRouteStore()
-	RegisterRoutes(r, store)
+	r := setupInstancesRouter(store)
 
 	payload := RegisterReq{
 		InstanceID: "i-1",
@@ -84,9 +92,7 @@ func TestRegisterRoute_OK(t *testing.T) {
 }
 
 func TestRegisterRoute_InvalidPort(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	RegisterRoutes(r, newMockRouteStore())
+	r := setupInstancesRouter(newMockRouteStore())
 
 	payload := RegisterReq{
 		InstanceID: "i-1",
@@ -106,11 +112,9 @@ func TestRegisterRoute_InvalidPort(t *testing.T) {
 }
 
 func TestDeleteRoute_Error(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
 	store := newMockRouteStore()
 	store.delErr = errors.New("boom")
-	RegisterRoutes(r, store)
+	r := setupInstancesRouter(store)
 
 	req := httptest.NewRequest(http.MethodDelete, "/instances/i-1", nil)
 	w := httptest.NewRecorder()

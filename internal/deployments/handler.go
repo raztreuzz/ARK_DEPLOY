@@ -44,10 +44,11 @@ func NewHandler(cfg config.Config, productStore ProductStore, instanceStore Inst
 type CreateDeploymentRequest struct {
 	ProductID    string `json:"product_id"`
 	Environment  string `json:"environment"`
-	JobName      string `json:"job_name"` // Opcional, para retrocompatibilidad
+	JobName      string `json:"job_name"`
 	AppName      string `json:"app_name"`
 	Version      string `json:"version"`
 	TargetHost   string `json:"target_host" binding:"required"`
+	SSHUser      string `json:"ssh_user" binding:"required"`
 	SimulateFail bool   `json:"simulate_fail"`
 }
 
@@ -58,14 +59,13 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	// Normalize and validate request
 	req.ProductID = strings.TrimSpace(req.ProductID)
 	req.Environment = strings.TrimSpace(req.Environment)
 	req.AppName = strings.TrimSpace(req.AppName)
 	req.Version = strings.TrimSpace(req.Version)
 	req.TargetHost = strings.TrimSpace(req.TargetHost)
+	req.SSHUser = strings.TrimSpace(req.SSHUser)
 
-	// Determine productID (new format or legacy fallback)
 	productID := req.ProductID
 	if productID == "" {
 		productID = req.AppName
@@ -75,44 +75,48 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	// Determine environment (new format or legacy mapping)
-	env := strings.ToUpper(req.Environment)
+	env := strings.ToLower(strings.TrimSpace(req.Environment))
 	if env == "" {
-		// Map version to environment
-		version := strings.ToLower(req.Version)
+		version := strings.ToLower(strings.TrimSpace(req.Version))
 		if version == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "environment or version is required"})
-			return
+			env = "prod"
+		} else {
+			switch version {
+			case "prod", "production":
+				env = "prod"
+			case "dev", "development":
+				env = "dev"
+			case "test", "testing":
+				env = "test"
+			default:
+				env = "prod"
+			}
 		}
-		switch version {
-		case "prod", "production":
-			env = "PROD"
-		case "dev", "development":
-			env = "DEV"
-		default:
-			env = "PROD" // default fallback
-		}
+	}
+
+	if env != "prod" && env != "dev" && env != "test" {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "environment must be prod, dev, or test"})
+		return
 	}
 
 	client := jenkins.NewClient(h.cfg.JenkinsBaseURL, h.cfg.JenkinsUser, h.cfg.JenkinsAPIToken)
 
-	// Resolve Jenkins job from product catalog
 	var jobName string
-	if req.JobName != "" {
-		// Direct job_name override (for advanced use)
-		jobName = req.JobName
+	var product storage.Product
+
+	if strings.TrimSpace(req.JobName) != "" {
+		jobName = strings.TrimSpace(req.JobName)
 	} else {
-		// Fetch product and resolve job
-		product, err := h.productStore.GetByID(productID)
+		p, err := h.productStore.GetByID(productID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"detail": "product not found"})
 			return
 		}
+		product = p
 
-		// Try deploy_jobs first, then fallback to legacy jobs field
-		jobName = product.DeployJobs[env]
-		if jobName == "" && len(product.DeployJobs) == 0 {
-			jobName = product.Jobs[env]
+		jobName = strings.TrimSpace(product.DeployJobs[env])
+		if jobName == "" {
+			jobName = strings.TrimSpace(product.Jobs[env])
 		}
 		if jobName == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"detail": fmt.Sprintf("no deploy job configured for product %s in environment %s", productID, env)})
@@ -120,28 +124,39 @@ func (h *Handler) Create(c *gin.Context) {
 		}
 	}
 
-	// Use normalized values for Jenkins parameters
-	appNameParam := req.AppName
-	if appNameParam == "" {
-		appNameParam = productID
+	if product.ID == "" {
+		p, err := h.productStore.GetByID(productID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"detail": "product not found"})
+			return
+		}
+		product = p
 	}
-	versionParam := req.Version
-	if versionParam == "" {
-		versionParam = strings.ToLower(env)
+
+	webService := strings.TrimSpace(product.WebService)
+	if webService == "" {
+		webService = "web"
+	}
+	webPort := product.WebPort
+	if webPort == 0 {
+		webPort = 80
 	}
 
 	instanceID := uuid.New().String()
 
-	// Client jobs must publish an ephemeral host port and register:
-	// instance_id -> target_host (tailscale) + target_port.
-	// ARK routes traffic by path /instances/<instance_id>/ to that target.
+	publicBase := strings.TrimRight(h.cfg.ARKPublicHost, "/")
+	callbackURL := publicBase + "/api/instances/register"
+
 	queueURL, err := client.TriggerJobWithParams(jobName, map[string]string{
-		"INSTANCE_ID":   instanceID,
-		"APP_NAME":      appNameParam,
-		"VERSION":       versionParam,
-		"TARGET_HOST":   req.TargetHost,
-		"ARK_CALLBACK_URL": "http://100.103.47.3/api/instances/register",
-		"SIMULATE_FAIL": boolToString(req.SimulateFail),
+		"INSTANCE_ID":      instanceID,
+		"PRODUCT_ID":       productID,
+		"ENV":              env,
+		"TARGET_HOST":      req.TargetHost,
+		"SSH_USER":         req.SSHUser,
+		"ARK_CALLBACK_URL": callbackURL,
+		"WEB_SERVICE":      webService,
+		"WEB_PORT":         strconv.Itoa(webPort),
+		"SIMULATE_FAIL":    boolToString(req.SimulateFail),
 	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"detail": err.Error()})
@@ -150,17 +165,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 	buildNumber, resolved := h.tryResolveBuildNumber(client, jobName, queueURL)
 
-	// Determine public host for reverse proxy URL
-	publicHost := h.cfg.ARKPublicHost
-	if publicHost == "" {
-		publicHost = c.Request.Host
-	}
-	if publicHost == "" {
-		publicHost = "localhost:3000"
-	}
-
-	// URL exposed via Nginx reverse proxy (path-based), not direct node access
-	instanceURL := fmt.Sprintf("http://%s/instances/%s/", publicHost, instanceID)
+	instanceURL := publicBase + "/instances/" + instanceID + "/"
 
 	instance := storage.Instance{
 		ID:          instanceID,
@@ -202,7 +207,6 @@ func (h *Handler) Create(c *gin.Context) {
 func (h *Handler) List(c *gin.Context) {
 	instances := h.instanceStore.GetAll()
 
-	// Ordenar por CreatedAt descendente (más nuevas primero)
 	sort.Slice(instances, func(i, j int) bool {
 		return instances[i].CreatedAt.After(instances[j].CreatedAt)
 	})
@@ -221,9 +225,6 @@ func (h *Handler) Delete(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"detail": "instance not found"})
 		return
 	}
-
-	// TODO: Agregar limpieza de contenedor Docker en el nodo (deviceID)
-	// Por ahora solo eliminamos del store
 
 	if err := h.instanceStore.Delete(instanceID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "failed to delete instance: " + err.Error()})

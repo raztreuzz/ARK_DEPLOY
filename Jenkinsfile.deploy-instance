@@ -13,6 +13,9 @@ pipeline {
     string(name: 'TARGET_HOST', defaultValue: '', description: 'Client Tailscale IP (chosen by ARK)')
     string(name: 'SSH_USER', defaultValue: 'raztreuzz', description: 'SSH user on client')
     string(name: 'ARK_CALLBACK_URL', defaultValue: 'http://100.103.47.3/api/instances/register', description: 'ARK callback URL via gateway :80')
+
+    string(name: 'WEB_SERVICE', defaultValue: 'web', description: 'Compose service suffix for web container (INSTANCE_ID-WEB_SERVICE)')
+    string(name: 'WEB_PORT', defaultValue: '80', description: 'Internal container port to resolve published port for')
   }
 
   stages {
@@ -25,6 +28,8 @@ pipeline {
           [ -n "${PRODUCT_ID}" ] || (echo "PRODUCT_ID is required" && exit 1)
           [ -n "${TARGET_HOST}" ] || (echo "TARGET_HOST is required" && exit 1)
           [ -n "${SSH_USER}" ] || (echo "SSH_USER is required" && exit 1)
+          [ -n "${WEB_SERVICE}" ] || (echo "WEB_SERVICE is required" && exit 1)
+          [ -n "${WEB_PORT}" ] || (echo "WEB_PORT is required" && exit 1)
         '''
       }
     }
@@ -56,16 +61,21 @@ EOF
       }
     }
 
-    stage('Resolve Frontend Port (Client)') {
+    stage('Resolve Web Port (Client)') {
       steps {
         sshagent(credentials: ["${SSH_KEY_ID}"]) {
           sh '''
             set -eu
+
+            CONTAINER="${INSTANCE_ID}-${WEB_SERVICE}"
+
             PORT="$(ssh -o StrictHostKeyChecking=no ${SSH_USER}@${TARGET_HOST} \
-              "docker port '${INSTANCE_ID}-web' 80/tcp | head -n 1 | awk -F: '{print \\$2}'")"
+              "docker port '${CONTAINER}' '${WEB_PORT}/tcp' | head -n 1 | awk -F: '{print \\$2}'")"
 
             if [ -z "$PORT" ]; then
-              echo "could not resolve published port for ${INSTANCE_ID}-web 80/tcp"
+              echo "could not resolve published port for ${CONTAINER} ${WEB_PORT}/tcp"
+              echo "debug: docker ps:"
+              ssh -o StrictHostKeyChecking=no ${SSH_USER}@${TARGET_HOST} "docker ps --format 'table {{.Names}}\\t{{.Ports}}\\t{{.Status}}' | head -n 50"
               exit 1
             fi
 

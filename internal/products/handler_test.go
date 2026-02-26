@@ -104,8 +104,9 @@ func TestCreateProduct(t *testing.T) {
 				Name:        "Task Manager",
 				Description: "Sistema de tareas",
 				DeployJobs: map[string]string{
-					"PROD": "deploy-task-manager-prod",
-					"DEV":  "deploy-task-manager-dev",
+					"prod": "deploy-task-manager-prod",
+					"dev":  "deploy-task-manager-dev",
+					"test": "deploy-task-manager-test",
 				},
 				DeleteJob: "delete-task-manager",
 			},
@@ -118,7 +119,9 @@ func TestCreateProduct(t *testing.T) {
 				Name:        "Task Manager",
 				Description: "Sistema de tareas",
 				DeployJobs: map[string]string{
-					"PROD": "deploy-task-manager-prod",
+					"prod": "deploy-task-manager-prod",
+					"dev":  "deploy-task-manager-dev",
+					"test": "deploy-task-manager-test",
 				},
 				DeleteJob: "delete-task-manager",
 			},
@@ -143,8 +146,24 @@ func TestCreateProduct(t *testing.T) {
 				Name:        "Task Manager",
 				Description: "Sistema de tareas",
 				DeployJobs: map[string]string{
-					"PROD": "deploy-task-manager-prod",
+					"prod": "deploy-task-manager-prod",
+					"dev":  "deploy-task-manager-dev",
+					"test": "deploy-task-manager-test",
 				},
+			},
+			wantStatus: http.StatusBadRequest,
+			wantError:  true,
+		},
+		{
+			name: "crear producto sin envs requeridos",
+			payload: CreateProductRequest{
+				ID:          "task-manager-2",
+				Name:        "Task Manager 2",
+				Description: "Sistema de tareas",
+				DeployJobs: map[string]string{
+					"prod": "deploy-task-manager-prod",
+				},
+				DeleteJob: "delete-task-manager",
 			},
 			wantStatus: http.StatusBadRequest,
 			wantError:  true,
@@ -169,6 +188,9 @@ func TestCreateProduct(t *testing.T) {
 				assert.Equal(t, tt.payload.ID, response.ID)
 				assert.Equal(t, tt.payload.Name, response.Name)
 				assert.Equal(t, tt.payload.DeleteJob, response.DeleteJob)
+				assert.Equal(t, "deploy-task-manager-prod", response.DeployJobs["prod"])
+				assert.Equal(t, "deploy-task-manager-dev", response.DeployJobs["dev"])
+				assert.Equal(t, "deploy-task-manager-test", response.DeployJobs["test"])
 			}
 		})
 	}
@@ -178,18 +200,25 @@ func TestListProducts(t *testing.T) {
 	router, handler := setupTest()
 	router.GET("/products", handler.List)
 
-	// Crear algunos productos primero
 	handler.store.Create(storage.Product{
-		ID:         "prod-1",
-		Name:       "Product 1",
-		DeployJobs: map[string]string{"PROD": "job-1"},
-		DeleteJob:  "delete-job-1",
+		ID:   "prod-1",
+		Name: "Product 1",
+		DeployJobs: map[string]string{
+			"prod": "job-1-prod",
+			"dev":  "job-1-dev",
+			"test": "job-1-test",
+		},
+		DeleteJob: "delete-job-1",
 	})
 	handler.store.Create(storage.Product{
-		ID:         "prod-2",
-		Name:       "Product 2",
-		DeployJobs: map[string]string{"PROD": "job-2"},
-		DeleteJob:  "delete-job-2",
+		ID:   "prod-2",
+		Name: "Product 2",
+		DeployJobs: map[string]string{
+			"prod": "job-2-prod",
+			"dev":  "job-2-dev",
+			"test": "job-2-test",
+		},
+		DeleteJob: "delete-job-2",
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/products", nil)
@@ -209,13 +238,14 @@ func TestGetProduct(t *testing.T) {
 	router, handler := setupTest()
 	router.GET("/products/:id", handler.Get)
 
-	// Crear un producto
 	handler.store.Create(storage.Product{
 		ID:          "task-manager",
 		Name:        "Task Manager",
 		Description: "Sistema de tareas",
 		DeployJobs: map[string]string{
-			"PROD": "deploy-task-manager-prod",
+			"prod": "deploy-task-manager-prod",
+			"dev":  "deploy-task-manager-dev",
+			"test": "deploy-task-manager-test",
 		},
 		DeleteJob: "delete-task-manager",
 	})
@@ -263,20 +293,24 @@ func TestUpdateProduct(t *testing.T) {
 	router, handler := setupTest()
 	router.PUT("/products/:id", handler.Update)
 
-	// Crear un producto
 	handler.store.Create(storage.Product{
-		ID:         "task-manager",
-		Name:       "Task Manager Old",
-		DeployJobs: map[string]string{"PROD": "old-job"},
-		DeleteJob:  "delete-task-manager",
+		ID:   "task-manager",
+		Name: "Task Manager Old",
+		DeployJobs: map[string]string{
+			"prod": "old-job-prod",
+			"dev":  "old-job-dev",
+			"test": "old-job-test",
+		},
+		DeleteJob: "delete-task-manager",
 	})
 
 	payload := UpdateProductRequest{
 		Name:        "Task Manager Updated",
 		Description: "Nueva descripción",
 		DeployJobs: map[string]string{
-			"PROD": "new-job-prod",
-			"DEV":  "new-job-dev",
+			"prod": "new-job-prod",
+			"dev":  "new-job-dev",
+			"test": "new-job-test",
 		},
 		DeleteJob: "delete-task-manager",
 	}
@@ -294,19 +328,22 @@ func TestUpdateProduct(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "Task Manager Updated", response.Name)
-	assert.Equal(t, "new-job-prod", response.DeployJobs["PROD"])
+	assert.Equal(t, "new-job-prod", response.DeployJobs["prod"])
 }
 
 func TestDeleteProduct(t *testing.T) {
 	router, handler := setupTest()
 	router.DELETE("/products/:id", handler.Delete)
 
-	// Crear un producto
 	handler.store.Create(storage.Product{
-		ID:         "task-manager",
-		Name:       "Task Manager",
-		DeployJobs: map[string]string{"PROD": "job"},
-		DeleteJob:  "delete-task-manager",
+		ID:   "task-manager",
+		Name: "Task Manager",
+		DeployJobs: map[string]string{
+			"prod": "job-prod",
+			"dev":  "job-dev",
+			"test": "job-test",
+		},
+		DeleteJob: "delete-task-manager",
 	})
 
 	req := httptest.NewRequest(http.MethodDelete, "/products/task-manager", nil)
@@ -316,7 +353,6 @@ func TestDeleteProduct(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Verificar que fue eliminado
 	_, err := handler.store.GetByID("task-manager")
 	assert.Error(t, err)
 }

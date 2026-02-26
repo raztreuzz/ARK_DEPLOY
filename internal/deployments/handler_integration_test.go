@@ -15,7 +15,6 @@ import (
 	"ark_deploy/internal/storage"
 )
 
-// MockInstanceStore para tests sin Redis
 type MockInstanceStore struct {
 	mu        sync.RWMutex
 	instances map[string]storage.Instance
@@ -73,7 +72,6 @@ func (s *MockInstanceStore) Delete(id string) error {
 	return nil
 }
 
-// MockProductStore para tests sin Redis
 type MockProductStore struct {
 	mu       sync.RWMutex
 	products map[string]storage.Product
@@ -113,13 +111,10 @@ func setupTestRouter(productStore ProductStore, instanceStore InstanceStore) *gi
 	r := gin.New()
 
 	cfg := config.Config{
-		Port:             "5050",
-		JenkinsBaseURL:   "http://localhost:8080",
-		JenkinsUser:      "test",
-		JenkinsAPIToken:  "test",
-		JenkinsJob:       "test-job",
-		TailscaleAPIKey:  "test",
-		TailscaleTailnet: "test.com",
+		JenkinsBaseURL:  "http://jenkins-test.local",
+		JenkinsUser:     "test-user",
+		JenkinsAPIToken: "test-token",
+		ARKPublicHost:   "http://ark-test.local",
 	}
 
 	h := NewHandler(cfg, productStore, instanceStore)
@@ -155,7 +150,6 @@ func TestDeploymentsList_WithInstances(t *testing.T) {
 	productStore := NewMockProductStore()
 	instanceStore := NewMockInstanceStore()
 
-	// Crear instancia manualmente
 	instance := storage.Instance{
 		ID:          "test-instance",
 		ProductID:   "test-product",
@@ -190,7 +184,6 @@ func TestDeploymentsDelete_Success(t *testing.T) {
 	productStore := NewMockProductStore()
 	instanceStore := NewMockInstanceStore()
 
-	// Crear instancia manualmente
 	instance := storage.Instance{
 		ID:        "delete-test",
 		ProductID: "test-product",
@@ -218,7 +211,6 @@ func TestDeploymentsDelete_Success(t *testing.T) {
 		t.Errorf("Expected 'instance deleted', got %v", response["message"])
 	}
 
-	// Verificar que fue eliminada
 	_, err := instanceStore.GetByID("delete-test")
 	if err == nil {
 		t.Errorf("Instance should be deleted")

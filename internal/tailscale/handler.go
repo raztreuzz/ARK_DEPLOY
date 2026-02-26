@@ -2,87 +2,58 @@ package tailscale
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
 type ClientAPI interface {
 	ListDevices() ([]Device, error)
-	GetDevice(deviceID string) (*Device, error)
-	DeleteDevice(deviceID string) error
 }
 
-// Handler maneja las peticiones HTTP relacionadas con Tailscale
 type Handler struct {
 	client ClientAPI
 }
 
-// NewHandler crea un nuevo handler de Tailscale
 func NewHandler(client ClientAPI) *Handler {
-	return &Handler{
-		client: client,
+	if client == nil {
+		panic("tailscale client is required")
 	}
+	return &Handler{client: client}
 }
 
-// ListDevices maneja GET /tailscale/devices
 func (h *Handler) ListDevices(c *gin.Context) {
 	devices, err := h.client.ListDevices()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":  "Failed to list devices",
-			"detail": err.Error(),
-		})
+		c.JSON(http.StatusBadGateway, gin.H{"detail": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"total":   len(devices),
 		"devices": devices,
-		"count":   len(devices),
 	})
 }
 
-// GetDevice maneja GET /tailscale/devices/:id
 func (h *Handler) GetDevice(c *gin.Context) {
-	deviceID := c.Param("id")
-	if deviceID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Device ID is required",
-		})
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "device id is required"})
 		return
 	}
 
-	device, err := h.client.GetDevice(deviceID)
+	devices, err := h.client.ListDevices()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":  "Failed to get device",
-			"detail": err.Error(),
-		})
+		c.JSON(http.StatusBadGateway, gin.H{"detail": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, device)
-}
-
-// DeleteDevice maneja DELETE /tailscale/devices/:id
-func (h *Handler) DeleteDevice(c *gin.Context) {
-	deviceID := c.Param("id")
-	if deviceID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Device ID is required",
-		})
-		return
+	for _, d := range devices {
+		if d.ID == id {
+			c.JSON(http.StatusOK, d)
+			return
+		}
 	}
 
-	if err := h.client.DeleteDevice(deviceID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":  "Failed to delete device",
-			"detail": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":   "Device deleted successfully",
-		"device_id": deviceID,
-	})
+	c.JSON(http.StatusNotFound, gin.H{"detail": "device not found"})
 }

@@ -43,6 +43,10 @@ func (s *InstanceStore) Create(i Instance) error {
 		return errors.New("instance already exists")
 	}
 
+	if i.CreatedAt.IsZero() {
+		i.CreatedAt = time.Now().UTC()
+	}
+
 	data, err := json.Marshal(i)
 	if err != nil {
 		return err
@@ -53,24 +57,36 @@ func (s *InstanceStore) Create(i Instance) error {
 
 func (s *InstanceStore) GetAll() []Instance {
 	ctx := context.Background()
-	keys, err := redis.Client.Keys(ctx, "instance:*").Result()
-	if err != nil {
-		return []Instance{}
-	}
 
-	result := make([]Instance, 0, len(keys))
-	for _, key := range keys {
-		data, err := redis.Client.Get(ctx, key).Result()
+	var cursor uint64
+	result := make([]Instance, 0)
+
+	for {
+		keys, next, err := redis.Client.Scan(ctx, cursor, "instance:*", 100).Result()
 		if err != nil {
-			continue
+			return []Instance{}
 		}
 
-		var i Instance
-		if err := json.Unmarshal([]byte(data), &i); err != nil {
-			continue
+		for _, key := range keys {
+			data, err := redis.Client.Get(ctx, key).Result()
+			if err != nil {
+				continue
+			}
+
+			var i Instance
+			if err := json.Unmarshal([]byte(data), &i); err != nil {
+				continue
+			}
+
+			result = append(result, i)
 		}
-		result = append(result, i)
+
+		cursor = next
+		if cursor == 0 {
+			break
+		}
 	}
+
 	return result
 }
 
@@ -87,6 +103,7 @@ func (s *InstanceStore) GetByID(id string) (Instance, error) {
 	if err := json.Unmarshal([]byte(data), &i); err != nil {
 		return Instance{}, err
 	}
+
 	return i, nil
 }
 
@@ -105,6 +122,7 @@ func (s *InstanceStore) UpdateStatus(id string, status string) error {
 	}
 
 	instance.Status = status
+
 	newData, err := json.Marshal(instance)
 	if err != nil {
 		return err

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -29,12 +30,7 @@ func (c *Client) ReadQueueItem(queueURL string) (int, bool, error) {
 	if err != nil {
 		return 0, false, err
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
@@ -64,7 +60,11 @@ type buildStatusResp struct {
 }
 
 func (c *Client) ReadBuildStatus(jobName string, buildNumber int) (bool, string, error) {
-	u := fmt.Sprintf("%s/job/%s/%d/api/json", c.baseURL, jobName, buildNumber)
+	u := fmt.Sprintf("%s/job/%s/%d/api/json",
+		c.baseURL,
+		url.PathEscape(jobName),
+		buildNumber,
+	)
 
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
@@ -76,12 +76,7 @@ func (c *Client) ReadBuildStatus(jobName string, buildNumber int) (bool, string,
 	if err != nil {
 		return false, "", err
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
@@ -97,7 +92,11 @@ func (c *Client) ReadBuildStatus(jobName string, buildNumber int) (bool, string,
 }
 
 func (c *Client) ReadBuildLogs(jobName string, buildNumber int) (string, error) {
-	u := fmt.Sprintf("%s/job/%s/%d/consoleText", c.baseURL, jobName, buildNumber)
+	u := fmt.Sprintf("%s/job/%s/%d/consoleText",
+		c.baseURL,
+		url.PathEscape(jobName),
+		buildNumber,
+	)
 
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
@@ -109,12 +108,7 @@ func (c *Client) ReadBuildLogs(jobName string, buildNumber int) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
@@ -130,7 +124,10 @@ func (c *Client) ReadBuildLogs(jobName string, buildNumber int) (string, error) 
 }
 
 func (c *Client) ReadBuildNumberByQueueID(jobName string, queueID int) (int, error) {
-	u := fmt.Sprintf("%s/job/%s/api/json?tree=builds[number,queueId]{0,20}", c.baseURL, jobName)
+	u := fmt.Sprintf("%s/job/%s/api/json?tree=builds[number,queueId]{0,20}",
+		c.baseURL,
+		url.PathEscape(jobName),
+	)
 
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
@@ -142,12 +139,7 @@ func (c *Client) ReadBuildNumberByQueueID(jobName string, queueID int) (int, err
 	if err != nil {
 		return 0, err
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
@@ -195,12 +187,7 @@ func (c *Client) ReadQueueItems() ([]QueueItemInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
@@ -231,61 +218,6 @@ func (c *Client) ReadQueueItems() ([]QueueItemInfo, error) {
 			Why:     item.Why,
 			Blocked: item.Blocked,
 			Stuck:   item.Stuck,
-		})
-	}
-
-	return result, nil
-}
-
-type JobInfo struct {
-	Name  string `json:"name"`
-	URL   string `json:"url"`
-	Color string `json:"color"`
-}
-
-func (c *Client) ReadAllJobs() ([]JobInfo, error) {
-	u := fmt.Sprintf("%s/api/json?tree=jobs[name,url,color]", c.baseURL)
-
-	req, err := http.NewRequest(http.MethodGet, u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.SetBasicAuth(c.user, c.token)
-
-	resp, err := c.httpc.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-
-		}
-	}(resp.Body)
-
-	if resp.StatusCode != 200 {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("jobs api failed: status=%d body=%s", resp.StatusCode, string(b))
-	}
-
-	var data struct {
-		Jobs []struct {
-			Name  string `json:"name"`
-			URL   string `json:"url"`
-			Color string `json:"color"`
-		} `json:"jobs"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return nil, err
-	}
-
-	result := make([]JobInfo, 0, len(data.Jobs))
-	for _, job := range data.Jobs {
-		result = append(result, JobInfo{
-			Name:  job.Name,
-			URL:   job.URL,
-			Color: job.Color,
 		})
 	}
 
