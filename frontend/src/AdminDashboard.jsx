@@ -58,7 +58,7 @@ function useAdminData() {
 export default function AdminDashboard() {
   const { products, instances, jobsCatalog, loading, error, fetchData } = useAdminData();
   const [filter, setFilter] = useState('');
-  const [modals, setModals] = useState({ product: null, logs: null, delete: null });
+  const [modals, setModals] = useState({ product: null, productDelete: null, logs: null, delete: null });
 
   const jobOptions = useMemo(() => {
     const set = new Set();
@@ -136,6 +136,25 @@ export default function AdminDashboard() {
     await fetchData();
   };
 
+  const handleDeleteProduct = async (product) => {
+    dbg('delete product', product?.id);
+    const res = await fetch(`/api/products/${product.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    dbg('delete product status', res.status);
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error('[Admin] delete product error response', err);
+      throw new Error(err.detail || res.statusText);
+    }
+
+    dbg('delete product success');
+    setModals((m) => ({ ...m, productDelete: null }));
+    await fetchData();
+  };
+
   if (loading && products.length === 0) return <LoadingState />;
 
   return (
@@ -161,6 +180,7 @@ export default function AdminDashboard() {
           <ProductsTable
             products={filteredProducts}
             onEdit={(p) => setModals((m) => ({ ...m, product: p }))}
+            onDelete={(p) => setModals((m) => ({ ...m, productDelete: p }))}
           />
         </section>
 
@@ -201,6 +221,13 @@ export default function AdminDashboard() {
           onConfirm={() => handleDeleteInstance(modals.delete)}
         />
       )}
+      {modals.productDelete && (
+        <ProductDeleteConfirmModal
+          product={modals.productDelete}
+          onClose={() => setModals((m) => ({ ...m, productDelete: null }))}
+          onConfirm={() => handleDeleteProduct(modals.productDelete)}
+        />
+      )}
 
       <CustomScrollbarStyles />
     </div>
@@ -234,7 +261,7 @@ const TopBar = ({ filter, setFilter, onRefresh }) => (
   </nav>
 );
 
-const ProductsTable = ({ products, onEdit }) => (
+const ProductsTable = ({ products, onEdit, onDelete }) => (
   <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
     <table className="w-full text-left border-collapse">
       <thead>
@@ -268,8 +295,11 @@ const ProductsTable = ({ products, onEdit }) => (
               </div>
             </td>
             <td className="px-6 py-4 text-right">
-              <button onClick={() => onEdit(p)} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400">
+              <button onClick={() => onEdit(p)} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 mr-2" title="Editar producto">
                 <MoreVertical size={16} />
+              </button>
+              <button onClick={() => onDelete(p)} className="p-2 hover:bg-red-500/20 rounded-lg text-slate-400 hover:text-red-400" title="Eliminar producto">
+                <Trash2 size={16} />
               </button>
             </td>
           </tr>
@@ -559,6 +589,48 @@ const InstanceDeleteConfirmModal = ({ instance, onClose, onConfirm }) => {
         <div className="flex gap-3">
           <button onClick={onClose} className="flex-1 py-3 text-xs font-bold text-slate-500 hover:text-slate-300">Cancelar</button>
           <button onClick={handleConfirm} disabled={loading} className="flex-[2] py-3 bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-red-600/20 transition-all">{loading ? 'Eliminando...' : 'Eliminar Ahora'}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ProductDeleteConfirmModal = ({ product, onClose, onConfirm }) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleConfirm = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await onConfirm();
+    } catch (e) {
+      setError(e.message || 'Error eliminando producto');
+      setLoading(false);
+      return;
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-red-950/20 backdrop-blur-sm">
+      <div className="bg-slate-950 border border-red-500/20 w-full max-w-md rounded-[2rem] shadow-2xl p-8 space-y-6">
+        <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto text-red-500">
+          <AlertCircle size={32} />
+        </div>
+        <div className="text-center space-y-2">
+          <h3 className="text-lg font-black uppercase tracking-tighter">¿Eliminar Producto?</h3>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Vas a eliminar <span className="font-bold text-slate-300">{product.name}</span> ({product.id}).
+            Esta acción no se puede deshacer.
+          </p>
+        </div>
+        {error && <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">{error}</div>}
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 py-3 text-xs font-bold text-slate-500 hover:text-slate-300">Cancelar</button>
+          <button onClick={handleConfirm} disabled={loading} className="flex-[2] py-3 bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-red-600/20 transition-all">
+            {loading ? 'Eliminando...' : 'Eliminar Producto'}
+          </button>
         </div>
       </div>
     </div>

@@ -19,6 +19,7 @@ const dbg = (...args) => console.log('[Landing]', ...args);
 export default function ArkLanding() {
   // Estados de Datos
   const [products, setProducts] = useState([]);
+  const [selectedProductId, setSelectedProductId] = useState('');
   const [loading, setLoading] = useState(true);
   const [devices, setDevices] = useState([]);
   const [activeDeployment, setActiveDeployment] = useState(null);
@@ -53,6 +54,12 @@ export default function ArkLanding() {
       setError('Error de conexion con el catalogo de productos.');
     }
   };
+
+  useEffect(() => {
+    if (!products.length) return;
+    const exists = products.some((p) => p.id === selectedProductId);
+    if (!exists) setSelectedProductId(products[0].id);
+  }, [products, selectedProductId]);
 
   const fetchDevices = async () => {
     try {
@@ -153,6 +160,8 @@ export default function ArkLanding() {
 
   if (loading) return <LoadingSkeleton />;
 
+  const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
+
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 selection:bg-blue-500/30">
       <Navbar />
@@ -169,20 +178,35 @@ export default function ArkLanding() {
           </p>
 
           <div className="max-w-md mx-auto">
-            {products.length > 0 ? (
+            {selectedProduct ? (
               <div className="bg-slate-900 border border-slate-800 p-8 rounded-[2.5rem] shadow-2xl shadow-black/50 animate-in fade-in zoom-in-95 duration-500">
                 <div className="flex flex-col items-center gap-6">
-                  <ProductIcon productId={products[0].id} />
+                  {products.length > 1 && (
+                    <div className="w-full">
+                      <label className="block text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2 text-left">Producto</label>
+                      <select
+                        value={selectedProductId}
+                        onChange={(e) => setSelectedProductId(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-200 outline-none focus:ring-1 ring-blue-500"
+                      >
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name} ({p.id})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <ProductIcon productId={selectedProduct.id} />
 
                   <div className="space-y-1">
                     <h2 className="text-2xl font-bold text-white tracking-tight">
-                      {products[0].name}
+                      {selectedProduct.name}
                     </h2>
                     <p className="text-[10px] font-mono text-slate-500 uppercase tracking-[0.2em]">Version Estable</p>
                   </div>
 
                   <button
-                    onClick={() => handleDeploy(products[0])}
+                    onClick={() => handleDeploy(selectedProduct)}
                     disabled={isDeploying}
                     className={`w-full py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all flex items-center justify-center gap-3 ${
                       isDeploying
@@ -341,8 +365,8 @@ const SupportFooter = () => (
         © 2026 Ark Cloud
       </p>
       <div className="flex gap-8 text-[10px] font-black uppercase tracking-widest text-slate-500">
-        <a href="mailto:soporte@ark.io" className="hover:text-blue-500 transition-colors">Soporte</a>
-        <a href="#" className="hover:text-blue-500 transition-colors">Docs</a>
+        <a href="mailto:raztreuzz1234@gmail.com" className="hover:text-blue-500 transition-colors">raztreuzz1234@gmail.com</a>
+        <a href="https://github.com/raztreuzz/ARK_DEPLOY" target="_blank" rel="noreferrer" className="hover:text-blue-500 transition-colors">Documentacion</a>
       </div>
     </div>
   </footer>
