@@ -191,6 +191,7 @@ func (h *Handler) Create(c *gin.Context) {
 			"job_name":     jobName,
 			"queue_url":    queueURL,
 			"build_number": buildNumber,
+			"target_host":  req.TargetHost,
 		})
 		return
 	}
@@ -201,6 +202,7 @@ func (h *Handler) Create(c *gin.Context) {
 		"status":      "queued",
 		"job_name":    jobName,
 		"queue_url":   queueURL,
+		"target_host": req.TargetHost,
 	})
 }
 

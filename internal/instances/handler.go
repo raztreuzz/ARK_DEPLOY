@@ -1,11 +1,13 @@
 package instances
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,9 +27,11 @@ func NewHandler(store RouteStore) *Handler {
 }
 
 type RegisterReq struct {
-	InstanceID string `json:"instance_id" binding:"required"`
-	TargetHost string `json:"target_host" binding:"required"`
-	TargetPort int    `json:"target_port" binding:"required"`
+	InstanceID    string `json:"instance_id" binding:"required"`
+	TargetHost    string `json:"target_host" binding:"required"`
+	TargetPort    int    `json:"target_port" binding:"required"`
+	ContainerName string `json:"container_name"`
+	WebPort       string `json:"web_port"`
 }
 
 func (h *Handler) RegisterRoutes(r gin.IRoutes) {
@@ -61,7 +65,14 @@ func (h *Handler) register(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	upstreamURL := fmt.Sprintf("http://%s:%d/", req.TargetHost, req.TargetPort)
+	reachable := checkUpstreamReachable(upstreamURL, 2*time.Second)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":             "ok",
+		"upstream_reachable": reachable,
+		"upstream_url":       upstreamURL,
+	})
 }
 
 func (h *Handler) delete(c *gin.Context) {
@@ -135,4 +146,18 @@ func singleJoiningSlash(a, b string) string {
 	default:
 		return a + b
 	}
+}
+
+func checkUpstreamReachable(rawURL string, timeout time.Duration) bool {
+	client := &http.Client{Timeout: timeout}
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode >= 200 && resp.StatusCode < 500
 }

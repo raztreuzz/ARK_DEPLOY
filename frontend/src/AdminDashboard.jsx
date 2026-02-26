@@ -20,6 +20,7 @@ const dbg = (...args) => console.log('[Admin]', ...args);
 function useAdminData() {
   const [products, setProducts] = useState([]);
   const [instances, setInstances] = useState([]);
+  const [jobsCatalog, setJobsCatalog] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -32,10 +33,13 @@ function useAdminData() {
         fetch('/api/products').then((r) => (r.ok ? r.json() : Promise.reject('Error en productos'))),
         fetch('/api/deployments').then((r) => (r.ok ? r.json() : Promise.reject('Error en instancias')))
       ]);
+      const jobsRes = await fetch('/api/jobs').then((r) => (r.ok ? r.json() : { jobs: [] })).catch(() => ({ jobs: [] }));
       dbg('products loaded', pRes.products?.length || 0);
       dbg('instances loaded', iRes.instances?.length || 0);
+      dbg('jobs loaded', jobsRes.jobs?.length || 0);
       setProducts(pRes.products || []);
       setInstances(iRes.instances || []);
+      setJobsCatalog(jobsRes.jobs || []);
     } catch (err) {
       console.error('[Admin] fetchData error', err);
       setError(err.toString());
@@ -47,17 +51,22 @@ function useAdminData() {
 
   useEffect(() => { fetchData(); }, []);
 
-  return { products, instances, loading, error, fetchData };
+  return { products, instances, jobsCatalog, loading, error, fetchData };
 }
 
 // --- COMPONENTE PRINCIPAL (Layout) ---
 export default function AdminDashboard() {
-  const { products, instances, loading, error, fetchData } = useAdminData();
+  const { products, instances, jobsCatalog, loading, error, fetchData } = useAdminData();
   const [filter, setFilter] = useState('');
   const [modals, setModals] = useState({ product: null, logs: null, delete: null });
 
   const jobOptions = useMemo(() => {
     const set = new Set();
+    (jobsCatalog || []).forEach((job) => {
+      const v = typeof job === 'string' ? job : (job?.name || job?.id || '');
+      const normalized = String(v || '').trim();
+      if (normalized) set.add(normalized);
+    });
     products.forEach((p) => {
       Object.values(p.deploy_jobs || {}).forEach((job) => {
         const v = String(job || '').trim();
@@ -67,7 +76,7 @@ export default function AdminDashboard() {
       if (del) set.add(del);
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [products]);
+  }, [products, jobsCatalog]);
 
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(filter.toLowerCase()) ||
@@ -338,6 +347,7 @@ const ProductFormModal = ({ product, jobOptions, onClose, onSave }) => {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const hasJobs = (jobOptions || []).length > 0;
 
   const handleSubmit = async () => {
     setSaving(true);
@@ -402,35 +412,60 @@ const ProductFormModal = ({ product, jobOptions, onClose, onSave }) => {
               {ENVS.map((env) => (
                 <div key={env} className="flex items-center gap-2">
                   <span className="text-[10px] w-10 font-bold text-slate-600">{env}</span>
-                  <input
-                    list="job-options-list"
+                  <select
                     value={form.deploy_jobs[env] || ''}
                     onChange={(e) => setForm({ ...form, deploy_jobs: { ...form.deploy_jobs, [env]: e.target.value } })}
-                    placeholder="Nombre del Job"
-                    className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-[10px] outline-none"
-                  />
+                    className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-[10px] outline-none text-slate-200"
+                    disabled={!hasJobs}
+                  >
+                    <option value="">Seleccionar job...</option>
+                    {(jobOptions || []).map((job) => (
+                      <option key={`${env}-${job}`} value={job}>{job}</option>
+                    ))}
+                  </select>
                 </div>
               ))}
               <div className="pt-2">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Job de Eliminacion</label>
-                  <input
-                    list="job-options-list"
+                  <select
                     value={form.delete_job}
                     onChange={(e) => setForm({ ...form, delete_job: e.target.value })}
-                    placeholder="ej: delete-generic-app"
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-xs outline-none focus:ring-1 ring-blue-500 transition-all"
-                  />
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-xs outline-none focus:ring-1 ring-blue-500 transition-all text-slate-200"
+                    disabled={!hasJobs}
+                  >
+                    <option value="">Seleccionar job...</option>
+                    {(jobOptions || []).map((job) => (
+                      <option key={`delete-${job}`} value={job}>{job}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
           </div>
 
-          <datalist id="job-options-list">
-            {(jobOptions || []).map((job) => (
-              <option key={job} value={job} />
-            ))}
-          </datalist>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Biblioteca de Jobs</label>
+            {hasJobs ? (
+              <div className="max-h-40 overflow-y-auto custom-scrollbar border border-slate-800 rounded-xl p-3 space-y-2 bg-slate-900/40">
+                {(jobOptions || []).map((job) => (
+                  <div key={`quick-${job}`} className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-slate-300 font-mono truncate">{job}</span>
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => setForm({ ...form, deploy_jobs: { ...form.deploy_jobs, PROD: job } })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-blue-600 text-[9px] font-bold">PROD</button>
+                      <button type="button" onClick={() => setForm({ ...form, deploy_jobs: { ...form.deploy_jobs, DEV: job } })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-blue-600 text-[9px] font-bold">DEV</button>
+                      <button type="button" onClick={() => setForm({ ...form, deploy_jobs: { ...form.deploy_jobs, TEST: job } })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-blue-600 text-[9px] font-bold">TEST</button>
+                      <button type="button" onClick={() => setForm({ ...form, delete_job: job })} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-red-600 text-[9px] font-bold">DEL</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl p-3">
+                No hay jobs disponibles desde Jenkins (/api/jobs).
+              </div>
+            )}
+          </div>
 
           {error && <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">{error}</div>}
         </div>

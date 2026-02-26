@@ -79,7 +79,15 @@ EOF
               exit 1
             fi
 
+            case "$PORT" in
+              ''|*[!0-9]*)
+                echo "resolved port is not numeric: $PORT"
+                exit 1
+                ;;
+            esac
+
             echo "$PORT" > target_port.txt
+            echo "$CONTAINER" > target_container.txt
           '''
         }
       }
@@ -90,11 +98,18 @@ EOF
         sh '''
           set -eu
           PORT="$(cat target_port.txt)"
+          CONTAINER="$(cat target_container.txt)"
+
+          cat > deploy_callback_payload.json <<EOF
+{"instance_id":"${INSTANCE_ID}","target_host":"${TARGET_HOST}","target_port":${PORT},"container_name":"${CONTAINER}","web_port":"${WEB_PORT}"}
+EOF
 
           curl -fsS -X POST "${ARK_CALLBACK_URL}" \
             -H "Content-Type: application/json" \
-            -d "{\\"instance_id\\":\\"${INSTANCE_ID}\\",\\"target_host\\":\\"${TARGET_HOST}\\",\\"target_port\\":${PORT}}"
+            --retry 3 --retry-delay 2 --retry-connrefused \
+            -d @deploy_callback_payload.json
         '''
+        archiveArtifacts artifacts: 'target_port.txt,target_container.txt,deploy_callback_payload.json', onlyIfSuccessful: true
       }
     }
   }
