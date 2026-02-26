@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Search, RefreshCw, Plus, MoreVertical, Terminal,
   Trash2, ExternalLink, Activity, Package, AlertCircle,
@@ -14,6 +14,8 @@ const INSTANCE_STATUS = {
   STOPPED: 'stopped'
 };
 
+const dbg = (...args) => console.log('[Admin]', ...args);
+
 // --- HOOK PRINCIPAL DE ESTADO ---
 function useAdminData() {
   const [products, setProducts] = useState([]);
@@ -25,15 +27,20 @@ function useAdminData() {
     setLoading(true);
     setError(null);
     try {
+      dbg('fetchData start');
       const [pRes, iRes] = await Promise.all([
         fetch('/api/products').then((r) => (r.ok ? r.json() : Promise.reject('Error en productos'))),
         fetch('/api/deployments').then((r) => (r.ok ? r.json() : Promise.reject('Error en instancias')))
       ]);
+      dbg('products loaded', pRes.products?.length || 0);
+      dbg('instances loaded', iRes.instances?.length || 0);
       setProducts(pRes.products || []);
       setInstances(iRes.instances || []);
     } catch (err) {
+      console.error('[Admin] fetchData error', err);
       setError(err.toString());
     } finally {
+      dbg('fetchData done');
       setLoading(false);
     }
   };
@@ -48,6 +55,19 @@ export default function AdminDashboard() {
   const { products, instances, loading, error, fetchData } = useAdminData();
   const [filter, setFilter] = useState('');
   const [modals, setModals] = useState({ product: null, logs: null, delete: null });
+
+  const jobOptions = useMemo(() => {
+    const set = new Set();
+    products.forEach((p) => {
+      Object.values(p.deploy_jobs || {}).forEach((job) => {
+        const v = String(job || '').trim();
+        if (v) set.add(v);
+      });
+      const del = String(p.delete_job || '').trim();
+      if (del) set.add(del);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [products]);
 
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(filter.toLowerCase()) ||
@@ -68,33 +88,41 @@ export default function AdminDashboard() {
     const isEdit = Boolean(modals.product?.id);
     const url = isEdit ? `/api/products/${modals.product.id}` : '/api/products';
     const method = isEdit ? 'PUT' : 'POST';
+    dbg('save product', method, url, payload);
 
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+    dbg('save product status', res.status);
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      console.error('[Admin] save product error response', err);
       throw new Error(err.detail || res.statusText);
     }
 
+    dbg('save product success');
     setModals((m) => ({ ...m, product: null }));
     await fetchData();
   };
 
   const handleDeleteInstance = async (instance) => {
+    dbg('delete instance', instance?.id);
     const res = await fetch(`/api/deployments/${instance.id}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' }
     });
+    dbg('delete instance status', res.status);
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      console.error('[Admin] delete instance error response', err);
       throw new Error(err.detail || res.statusText);
     }
 
+    dbg('delete instance success');
     setModals((m) => ({ ...m, delete: null }));
     await fetchData();
   };
@@ -146,6 +174,7 @@ export default function AdminDashboard() {
       {modals.product !== null && (
         <ProductFormModal
           product={modals.product}
+          jobOptions={jobOptions}
           onClose={() => setModals((m) => ({ ...m, product: null }))}
           onSave={handleSaveProduct}
         />
@@ -288,7 +317,7 @@ const InstanceList = ({ instances, onViewLogs, onDelete }) => (
 
 // --- MODALES (FASE 1) ---
 
-const ProductFormModal = ({ product, onClose, onSave }) => {
+const ProductFormModal = ({ product, jobOptions, onClose, onSave }) => {
   const [form, setForm] = useState(product?.id ? {
     ...product,
     deploy_jobs: {
@@ -374,6 +403,7 @@ const ProductFormModal = ({ product, onClose, onSave }) => {
                 <div key={env} className="flex items-center gap-2">
                   <span className="text-[10px] w-10 font-bold text-slate-600">{env}</span>
                   <input
+                    list="job-options-list"
                     value={form.deploy_jobs[env] || ''}
                     onChange={(e) => setForm({ ...form, deploy_jobs: { ...form.deploy_jobs, [env]: e.target.value } })}
                     placeholder="Nombre del Job"
@@ -382,10 +412,25 @@ const ProductFormModal = ({ product, onClose, onSave }) => {
                 </div>
               ))}
               <div className="pt-2">
-                <FormField label="Job de Eliminacion" value={form.delete_job} onChange={(v) => setForm({ ...form, delete_job: v })} placeholder="ej: delete-generic-app" />
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Job de Eliminacion</label>
+                  <input
+                    list="job-options-list"
+                    value={form.delete_job}
+                    onChange={(e) => setForm({ ...form, delete_job: e.target.value })}
+                    placeholder="ej: delete-generic-app"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-xs outline-none focus:ring-1 ring-blue-500 transition-all"
+                  />
+                </div>
               </div>
             </div>
           </div>
+
+          <datalist id="job-options-list">
+            {(jobOptions || []).map((job) => (
+              <option key={job} value={job} />
+            ))}
+          </datalist>
 
           {error && <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">{error}</div>}
         </div>
@@ -406,9 +451,11 @@ const InstanceLogsModal = ({ instanceId, onClose }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    dbg('logs modal fetch', instanceId);
     fetch(`/api/deployments/${instanceId}/logs`)
       .then((r) => r.json())
       .then((data) => {
+        dbg('logs modal response keys', Object.keys(data.logs || {}));
         const entries = Object.entries(data.logs || {});
         const lines = [];
         entries.forEach(([job, content]) => {
@@ -419,7 +466,10 @@ const InstanceLogsModal = ({ instanceId, onClose }) => {
         setLogs(lines);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((e) => {
+        console.error('[Admin] logs modal fetch error', e);
+        setLoading(false);
+      });
   }, [instanceId]);
 
   return (
@@ -573,4 +623,3 @@ const CustomScrollbarStyles = () => (
     .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
   `}</style>
 );
-

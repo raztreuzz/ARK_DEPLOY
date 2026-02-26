@@ -13,6 +13,8 @@ const PRODUCT_THEMES = {
   default: { icon: Package, color: 'text-slate-400', bg: 'bg-slate-500/10' }
 };
 
+const dbg = (...args) => console.log('[Landing]', ...args);
+
 // --- COMPONENTE PRINCIPAL ---
 export default function ArkLanding() {
   // Estados de Datos
@@ -29,7 +31,9 @@ export default function ArkLanding() {
   // 1. Carga Inicial y Recuperacion de Sesion
   useEffect(() => {
     const init = async () => {
+      dbg('Init start');
       await Promise.all([fetchProducts(), fetchDevices(), recoverDeployment()]);
+      dbg('Init done');
       setLoading(false);
     };
     init();
@@ -37,35 +41,46 @@ export default function ArkLanding() {
 
   const fetchProducts = async () => {
     try {
+      dbg('GET /api/products');
       const res = await fetch('/api/products');
+      dbg('GET /api/products status', res.status);
       if (!res.ok) throw new Error('No se pudo cargar el catalogo.');
       const data = await res.json();
+      dbg('Products loaded', data.products?.length || 0);
       setProducts(data.products || []);
     } catch (err) {
+      console.error('[Landing] fetchProducts error', err);
       setError('Error de conexion con el catalogo de productos.');
     }
   };
 
   const fetchDevices = async () => {
     try {
+      dbg('GET /api/tailscale/devices');
       const res = await fetch('/api/tailscale/devices');
+      dbg('GET /api/tailscale/devices status', res.status);
       if (res.ok) {
         const data = await res.json();
+        dbg('Devices loaded', data.devices?.length || 0);
         setDevices(data.devices || []);
       }
     } catch (e) {
-      console.error('Error cargando dispositivos de red');
+      console.error('[Landing] fetchDevices error', e);
     }
   };
 
   const recoverDeployment = async () => {
     try {
+      dbg('GET /api/deployments (recover)');
       const res = await fetch('/api/deployments');
+      dbg('GET /api/deployments status', res.status);
       if (res.ok) {
         const data = await res.json();
         const list = data.instances || [];
+        dbg('Recovered instances', list.length);
         if (list.length > 0) {
           const last = list[0];
+          dbg('Recovering active deployment', last.id, last.url, last.status);
           setActiveDeployment({
             instanceId: last.id,
             url: last.url,
@@ -75,13 +90,14 @@ export default function ArkLanding() {
         }
       }
     } catch (e) {
-      console.log('No se encontraron despliegues previos.');
+      console.log('[Landing] No se encontraron despliegues previos.');
     }
   };
 
   // 2. Logica de Despliegue
   const handleDeploy = async (product) => {
     if (isDeploying) return;
+    dbg('Deploy click', product?.id, product?.name);
 
     setError(null);
     setIsDeploying(true);
@@ -93,6 +109,7 @@ export default function ArkLanding() {
       const targetHost = targetDevice?.addresses?.find((a) => a.startsWith('100.')) || null;
 
       if (!targetHost) {
+        dbg('No target host from devices', devices);
         throw new Error('No hay nodos disponibles en la red para el despliegue.');
       }
 
@@ -102,14 +119,17 @@ export default function ArkLanding() {
         target_host: targetHost,
         ssh_user: 'root'
       };
+      dbg('POST /api/deployments payload', payload);
 
       const res = await fetch('/api/deployments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      dbg('POST /api/deployments status', res.status);
 
       const data = await res.json();
+      dbg('POST /api/deployments response', data);
 
       if (!res.ok) {
         throw new Error(data.detail || 'Error interno del servidor al desplegar.');
@@ -122,9 +142,11 @@ export default function ArkLanding() {
         productName: product.name
       });
     } catch (err) {
+      console.error('[Landing] handleDeploy error', err);
       setError(err.message);
       setActiveDeployment(null);
     } finally {
+      dbg('Deploy finished');
       setIsDeploying(false);
     }
   };
@@ -338,4 +360,3 @@ if (typeof document !== 'undefined') {
     document.head.appendChild(style);
   }
 }
-
