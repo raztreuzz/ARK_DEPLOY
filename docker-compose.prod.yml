@@ -33,7 +33,7 @@ services:
     image: ${ARK_FRONTEND_IMAGE}
     container_name: ark-deploy-frontend
     ports:
-      - "3000:80"
+      - "127.0.0.1:3000:80"
     depends_on:
       - ark-deploy
     restart: always

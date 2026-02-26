@@ -54,6 +54,12 @@ export default function ArkLanding() {
   const [isDeploying, setIsDeploying] = useState(false);
   const [error, setError] = useState(null);
   const [showLogs, setShowLogs] = useState(false);
+  const [deployLogs, setDeployLogs] = useState([]);
+
+  const pushDeployLog = (msg) => {
+    const time = new Date().toLocaleTimeString();
+    setDeployLogs((prev) => [...prev, `[${time}] ${msg}`]);
+  };
 
   // 1. Carga Inicial y Recuperacion de Sesion
   useEffect(() => {
@@ -61,7 +67,7 @@ export default function ArkLanding() {
       dbg('Init start');
       const rememberedHost = localStorage.getItem(LAST_TARGET_HOST_KEY) || '';
       if (rememberedHost) setSelectedHost(rememberedHost);
-      await Promise.all([fetchProducts(), fetchDevices(), recoverDeployment(), fetchCurrentDevice()]);
+      await Promise.all([fetchProducts(), fetchDevices(), fetchCurrentDevice()]);
       dbg('Init done');
       setLoading(false);
     };
@@ -131,17 +137,23 @@ export default function ArkLanding() {
     }
   };
 
-  const recoverDeployment = async () => {
+  const recoverDeployment = async (targetHost) => {
     try {
-      dbg('GET /api/deployments (recover)');
+      if (!targetHost) {
+        dbg('recoverDeployment skipped: missing targetHost');
+        setActiveDeployment(null);
+        return;
+      }
+      dbg('GET /api/deployments (recover)', targetHost);
       const res = await fetch('/api/deployments');
       dbg('GET /api/deployments status', res.status);
       if (res.ok) {
         const data = await res.json();
         const list = data.instances || [];
-        dbg('Recovered instances', list.length);
-        if (list.length > 0) {
-          const last = list[0];
+        const hostInstances = list.filter((item) => item.device_id === targetHost);
+        dbg('Recovered instances total/byHost', list.length, hostInstances.length);
+        if (hostInstances.length > 0) {
+          const last = hostInstances[0];
           dbg('Recovering active deployment', last.id, last.url, last.status);
           setActiveDeployment({
             instanceId: last.id,
@@ -151,6 +163,9 @@ export default function ArkLanding() {
             targetHost: last.device_id || ''
           });
           if (last.device_id) setSelectedHost(last.device_id);
+        }
+        if (hostInstances.length === 0) {
+          setActiveDeployment(null);
         }
       }
     } catch (e) {
@@ -165,7 +180,9 @@ export default function ArkLanding() {
 
     setError(null);
     setIsDeploying(true);
+    setDeployLogs([]);
     setActiveDeployment({ status: 'queued', productName: product.name });
+    pushDeployLog(`Solicitud de despliegue para ${product.name}`);
 
     try {
       // Buscar host disponible
@@ -190,6 +207,7 @@ export default function ArkLanding() {
         target_host: targetHost
       };
       dbg('POST /api/deployments payload', payload);
+      pushDeployLog(`Enviando deploy a ${targetHost}`);
 
       const res = await fetch('/api/deployments', {
         method: 'POST',
@@ -208,19 +226,77 @@ export default function ArkLanding() {
       setActiveDeployment({
         instanceId: data.instance_id,
         url: data.url,
-        status: 'success',
+        status: 'running',
         productName: product.name,
-        targetHost: data.target_host || targetHost
+        targetHost: data.target_host || targetHost,
+        jobName: data.job_name || '',
+        buildNumber: data.build_number || ''
       });
       localStorage.setItem(LAST_TARGET_HOST_KEY, data.target_host || targetHost);
+      pushDeployLog(`Job encolado: ${data.job_name || 'N/A'}`);
+      pushDeployLog('Esperando disponibilidad de la instancia...');
+
+      const waitResult = await waitForInstanceReady({
+        instanceURL: data.url,
+        instanceID: data.instance_id,
+        jobName: data.job_name,
+        buildNumber: data.build_number
+      });
+
+      if (waitResult.ready) {
+        pushDeployLog('Instancia lista y accesible.');
+        setActiveDeployment((prev) => prev ? ({ ...prev, status: 'success' }) : prev);
+      } else {
+        pushDeployLog('La instancia no quedo lista dentro del tiempo esperado.');
+        setActiveDeployment((prev) => prev ? ({ ...prev, status: 'failed' }) : prev);
+        setError('El despliegue sigue en proceso o fallo. Revisa logs de Jenkins/Admin.');
+      }
     } catch (err) {
       console.error('[Landing] handleDeploy error', err);
       setError(err.message);
       setActiveDeployment(null);
+      pushDeployLog(`Error: ${err.message}`);
     } finally {
       dbg('Deploy finished');
       setIsDeploying(false);
     }
+  };
+
+  const waitForInstanceReady = async ({ instanceURL, jobName, buildNumber }) => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let lastBuildState = '';
+
+    for (let i = 1; i <= 25; i += 1) {
+      pushDeployLog(`Chequeo ${i}/25: verificando ruta de instancia...`);
+      try {
+        const r = await fetch(instanceURL, { method: 'GET', cache: 'no-store' });
+        if (r.status !== 404 && r.status !== 502) {
+          return { ready: true };
+        }
+      } catch (e) {
+        // keep polling
+      }
+
+      if (jobName && buildNumber) {
+        try {
+          const statusRes = await fetch(`/api/deployments/job/${encodeURIComponent(jobName)}/build/${buildNumber}/status`);
+          if (statusRes.ok) {
+            const s = await statusRes.json();
+            const now = `${s.status || ''}:${s.result || ''}`;
+            if (now !== lastBuildState) {
+              lastBuildState = now;
+              pushDeployLog(`Jenkins: status=${s.status || 'N/A'} result=${s.result || 'N/A'}`);
+            }
+          }
+        } catch (e) {
+          // ignore transient errors
+        }
+      }
+
+      await sleep(2000);
+    }
+
+    return { ready: false };
   };
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
@@ -234,6 +310,10 @@ export default function ArkLanding() {
       setSelectedHost(currentDevice.target_host);
     }
   }, [devices, selectedHost, currentDevice]);
+
+  useEffect(() => {
+    recoverDeployment(currentDevice?.target_host || '');
+  }, [currentDevice?.target_host]);
 
   if (loading) return <LoadingSkeleton />;
 
@@ -326,6 +406,7 @@ export default function ArkLanding() {
               isOpen={showLogs}
               onToggle={() => setShowLogs(!showLogs)}
               status={activeDeployment.status}
+              logs={deployLogs}
             />
           </div>
         )}
@@ -374,17 +455,18 @@ const ErrorBanner = ({ message, onClose }) => (
 );
 
 const DeployStatusCard = ({ deployment }) => {
-  const isRunning = deployment.status === 'queued' || deployment.status === 'running';
+  const isRunning = deployment.status === 'queued' || deployment.status === 'running' || deployment.status === 'provisioning';
+  const isFailed = deployment.status === 'failed';
   return (
     <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl flex items-center justify-between">
       <div className="flex items-center gap-4">
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isRunning ? 'bg-blue-500/10' : 'bg-emerald-500/10'}`}>
-          {isRunning ? <Loader2 className="text-blue-500 animate-spin" /> : <CheckCircle className="text-emerald-500" />}
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isRunning ? 'bg-blue-500/10' : isFailed ? 'bg-red-500/10' : 'bg-emerald-500/10'}`}>
+          {isRunning ? <Loader2 className="text-blue-500 animate-spin" /> : isFailed ? <AlertCircle className="text-red-500" /> : <CheckCircle className="text-emerald-500" />}
         </div>
         <div>
           <h4 className="font-bold text-white">{deployment.productName}</h4>
           <p className="text-xs text-slate-500 uppercase tracking-widest font-mono">
-            Estado: {deployment.status === 'success' ? 'Ejecutando' : 'En cola'}
+            Estado: {deployment.status === 'success' ? 'Ejecutando' : deployment.status === 'failed' ? 'Fallido' : 'En progreso'}
           </p>
         </div>
       </div>
@@ -417,7 +499,7 @@ const InstanceAccessCard = ({ data }) => (
   </div>
 );
 
-const LogsPanel = ({ isOpen, onToggle, status }) => (
+const LogsPanel = ({ isOpen, onToggle, status, logs }) => (
   <div className="border border-slate-800 rounded-2xl overflow-hidden">
     <button
       onClick={onToggle}
@@ -430,9 +512,16 @@ const LogsPanel = ({ isOpen, onToggle, status }) => (
     </button>
     {isOpen && (
       <div className="bg-black p-6 font-mono text-[10px] text-slate-400 h-48 overflow-y-auto space-y-1">
-        <p className="text-blue-500 opacity-50">[SYSTEM] Iniciando monitor...</p>
-        <p>[INFO] Verificando SSH root...</p>
-        {status === 'success' && <p className="text-emerald-500">[OK] Proceso completado.</p>}
+        {logs && logs.length > 0 ? logs.map((l, idx) => (
+          <p key={`${idx}-${l}`} className={l.includes('Error') ? 'text-red-400' : l.includes('lista') || l.includes('[OK]') ? 'text-emerald-400' : 'text-slate-400'}>
+            {l}
+          </p>
+        )) : (
+          <>
+            <p className="text-blue-500 opacity-50">[SYSTEM] Esperando despliegue...</p>
+            {status === 'success' && <p className="text-emerald-500">[OK] Proceso completado.</p>}
+          </>
+        )}
       </div>
     )}
   </div>
