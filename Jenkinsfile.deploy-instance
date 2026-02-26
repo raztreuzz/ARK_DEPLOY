@@ -119,20 +119,21 @@ http {
   include /etc/nginx/conf.d/*.conf;
 }
 NGINX_MAIN
-              cat > "${REMOTE_BASE_DIR}/conf.d/${INSTANCE_ID}.conf" <<NGINX_SITE
+              cat > "${REMOTE_BASE_DIR}/conf.d/${INSTANCE_ID}.conf" <<'NGINX_SITE'
 server {
   listen 127.0.0.1:80;
-  server_name ${FRIENDLY_HOST};
+  server_name __FRIENDLY_HOST__;
   location / {
-    proxy_pass http://127.0.0.1:${PORT};
+    proxy_pass http://127.0.0.1:__PORT__;
     proxy_http_version 1.1;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
   }
 }
 NGINX_SITE
+              sed -i "s/__FRIENDLY_HOST__/${FRIENDLY_HOST}/g; s/__PORT__/${PORT}/g" "${REMOTE_BASE_DIR}/conf.d/${INSTANCE_ID}.conf"
               if docker ps -a --format '{{.Names}}' | grep -qx 'ark-local-proxy'; then
                 docker rm -f ark-local-proxy >/dev/null 2>&1 || true
               fi
