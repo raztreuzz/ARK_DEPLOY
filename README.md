@@ -120,25 +120,6 @@ TAILSCALE_TAILNET=example.com
 
 ---
 
-## Jenkins Jobs Configuration
-
-**⚠️ IMPORTANT**: Product jobs must publish an ephemeral host port and register instance routing in ARK.
-
-### Container Deployment Requirements
-
-✅ **CORRECT**:
-```bash
-docker run -d --name <instance_id> -p 0:80 nginx:alpine
-PORT=$(docker port <instance_id> 80/tcp | awk -F: '{print $2}' | tail -n 1)
-curl -X POST http://<ARK_BACKEND>:5050/instances/register \
-  -H "Content-Type: application/json" \
-  -d "{\"instance_id\":\"<instance_id>\",\"target_host\":\"<tailscale_ip>\",\"target_port\":$PORT}"
-```
-
-❌ **INCORRECT**:
-```bash
-docker run -d --name <instance_id> --network ark_production nginx:alpine
-```
 
 ### Architecture
 
