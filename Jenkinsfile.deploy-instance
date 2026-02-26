@@ -99,9 +99,13 @@ EOF
           set -eu
           PORT="$(cat target_port.txt)"
           CONTAINER="$(cat target_container.txt)"
+          SAFE_PRODUCT="$(echo "${PRODUCT_ID}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')"
+          SHORT_ID="$(echo "${INSTANCE_ID}" | cut -c1-8)"
+          LOCAL_URL="http://localhost:${PORT}/"
+          FRIENDLY_URL="http://${SAFE_PRODUCT}-${SHORT_ID}.localhost/"
 
           cat > deploy_callback_payload.json <<EOF
-{"instance_id":"${INSTANCE_ID}","target_host":"${TARGET_HOST}","target_port":${PORT},"container_name":"${CONTAINER}","web_port":"${WEB_PORT}"}
+{"instance_id":"${INSTANCE_ID}","target_host":"${TARGET_HOST}","target_port":${PORT},"container_name":"${CONTAINER}","web_port":"${WEB_PORT}","local_url":"${LOCAL_URL}","friendly_url":"${FRIENDLY_URL}"}
 EOF
 
           curl -fsS -X POST "${ARK_CALLBACK_URL}" \

@@ -15,6 +15,7 @@ const PRODUCT_THEMES = {
 
 const dbg = (...args) => console.log('[Landing]', ...args);
 const LAST_TARGET_HOST_KEY = 'ark:last_target_host';
+const pickAccessURL = (d) => d?.localUrl || d?.friendlyUrl || d?.url || '';
 
 const pickTargetHost = (device) => {
   const normalize = (v) => String(v || '').trim().split('/')[0];
@@ -158,6 +159,8 @@ export default function ArkLanding() {
           setActiveDeployment({
             instanceId: last.id,
             url: last.url,
+            localUrl: last.local_url || '',
+            friendlyUrl: last.friendly_url || '',
             status: last.status || 'success',
             productName: last.product_id || 'Instancia Activa',
             targetHost: last.device_id || ''
@@ -226,6 +229,8 @@ export default function ArkLanding() {
       setActiveDeployment({
         instanceId: data.instance_id,
         url: data.url,
+        localUrl: data.local_url || '',
+        friendlyUrl: data.friendly_url || '',
         status: 'running',
         productName: product.name,
         targetHost: data.target_host || targetHost,
@@ -244,6 +249,7 @@ export default function ArkLanding() {
       });
 
       if (waitResult.ready) {
+        await refreshDeploymentAccess(data.instance_id);
         pushDeployLog('Instancia lista y accesible.');
         setActiveDeployment((prev) => prev ? ({ ...prev, status: 'success' }) : prev);
       } else {
@@ -297,6 +303,24 @@ export default function ArkLanding() {
     }
 
     return { ready: false };
+  };
+
+  const refreshDeploymentAccess = async (instanceID) => {
+    try {
+      const res = await fetch('/api/deployments');
+      if (!res.ok) return;
+      const data = await res.json();
+      const hit = (data.instances || []).find((item) => item.id === instanceID);
+      if (!hit) return;
+      setActiveDeployment((prev) => prev ? ({
+        ...prev,
+        url: hit.url || prev.url,
+        localUrl: hit.local_url || prev.localUrl,
+        friendlyUrl: hit.friendly_url || prev.friendlyUrl
+      }) : prev);
+    } catch (e) {
+      // ignore best-effort update
+    }
   };
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
@@ -477,27 +501,33 @@ const DeployStatusCard = ({ deployment }) => {
   );
 };
 
-const InstanceAccessCard = ({ data }) => (
-  <div className="bg-emerald-500 border border-emerald-400 p-1 rounded-[2rem] shadow-2xl shadow-emerald-500/20 animate-in zoom-in-95">
-    <div className="bg-slate-950 rounded-[1.8rem] p-8">
-      <h4 className="text-emerald-400 font-black uppercase text-xs tracking-widest mb-4">Instancia Lista</h4>
-      <div className="flex flex-col md:flex-row gap-4 items-center">
-        <div className="flex-1 w-full bg-slate-900 p-4 rounded-2xl border border-slate-800">
-          <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Direccion de Acceso</p>
-          <p className="font-mono text-blue-400 truncate">{data.url}</p>
+const InstanceAccessCard = ({ data }) => {
+  const accessURL = pickAccessURL(data);
+  return (
+    <div className="bg-emerald-500 border border-emerald-400 p-1 rounded-[2rem] shadow-2xl shadow-emerald-500/20 animate-in zoom-in-95">
+      <div className="bg-slate-950 rounded-[1.8rem] p-8">
+        <h4 className="text-emerald-400 font-black uppercase text-xs tracking-widest mb-4">Instancia Lista</h4>
+        <div className="flex flex-col md:flex-row gap-4 items-center">
+          <div className="flex-1 w-full bg-slate-900 p-4 rounded-2xl border border-slate-800">
+            <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Direccion de Acceso</p>
+            <p className="font-mono text-blue-400 truncate">{accessURL}</p>
+            {data.url && data.url !== accessURL && (
+              <p className="font-mono text-slate-500 text-[10px] mt-2 truncate">Gateway: {data.url}</p>
+            )}
+          </div>
+          <a
+            href={accessURL}
+            target="_blank"
+            rel="noreferrer"
+            className="w-full md:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black uppercase text-xs tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2"
+          >
+            Abrir <ExternalLink size={16} />
+          </a>
         </div>
-        <a
-          href={data.url}
-          target="_blank"
-          rel="noreferrer"
-          className="w-full md:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black uppercase text-xs tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2"
-        >
-          Abrir <ExternalLink size={16} />
-        </a>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const LogsPanel = ({ isOpen, onToggle, status, logs }) => (
   <div className="border border-slate-800 rounded-2xl overflow-hidden">

@@ -18,12 +18,20 @@ type RouteStore interface {
 	DeleteRoute(instanceID string) error
 }
 
-type Handler struct {
-	store RouteStore
+type InstanceStore interface {
+	UpdateAccessURLs(id string, localURL string, friendlyURL string, status string) error
 }
 
-func NewHandler(store RouteStore) *Handler {
-	return &Handler{store: store}
+type Handler struct {
+	store         RouteStore
+	instanceStore InstanceStore
+}
+
+func NewHandler(store RouteStore, instanceStore InstanceStore) *Handler {
+	return &Handler{
+		store:         store,
+		instanceStore: instanceStore,
+	}
 }
 
 type RegisterReq struct {
@@ -32,6 +40,8 @@ type RegisterReq struct {
 	TargetPort    int    `json:"target_port" binding:"required"`
 	ContainerName string `json:"container_name"`
 	WebPort       string `json:"web_port"`
+	LocalURL      string `json:"local_url"`
+	FriendlyURL   string `json:"friendly_url"`
 }
 
 func (h *Handler) RegisterRoutes(r gin.IRoutes) {
@@ -49,6 +59,8 @@ func (h *Handler) register(c *gin.Context) {
 
 	req.InstanceID = strings.TrimSpace(req.InstanceID)
 	req.TargetHost = strings.TrimSpace(req.TargetHost)
+	req.LocalURL = strings.TrimSpace(req.LocalURL)
+	req.FriendlyURL = strings.TrimSpace(req.FriendlyURL)
 
 	if req.InstanceID == "" || req.TargetHost == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "instance_id and target_host are required"})
@@ -65,6 +77,10 @@ func (h *Handler) register(c *gin.Context) {
 		return
 	}
 
+	if h.instanceStore != nil {
+		_ = h.instanceStore.UpdateAccessURLs(req.InstanceID, req.LocalURL, req.FriendlyURL, "running")
+	}
+
 	upstreamURL := fmt.Sprintf("http://%s:%d/", req.TargetHost, req.TargetPort)
 	reachable := checkUpstreamReachable(upstreamURL, 2*time.Second)
 
@@ -72,6 +88,8 @@ func (h *Handler) register(c *gin.Context) {
 		"status":             "ok",
 		"upstream_reachable": reachable,
 		"upstream_url":       upstreamURL,
+		"local_url":          req.LocalURL,
+		"friendly_url":       req.FriendlyURL,
 	})
 }
 

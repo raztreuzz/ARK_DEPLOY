@@ -64,7 +64,7 @@ func setupInstancesRouter(store RouteStore) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 
-	h := NewHandler(store)
+	h := NewHandler(store, nil)
 	h.RegisterRoutes(r)
 
 	return r

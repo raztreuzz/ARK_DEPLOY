@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"ark_deploy/internal/redis"
@@ -17,6 +18,8 @@ type Instance struct {
 	Environment string            `json:"environment"`
 	Status      string            `json:"status"`
 	URL         string            `json:"url"`
+	LocalURL    string            `json:"local_url,omitempty"`
+	FriendlyURL string            `json:"friendly_url,omitempty"`
 	Builds      map[string]string `json:"builds"`
 	CreatedAt   time.Time         `json:"created_at"`
 }
@@ -122,6 +125,34 @@ func (s *InstanceStore) UpdateStatus(id string, status string) error {
 	}
 
 	instance.Status = status
+
+	newData, err := json.Marshal(instance)
+	if err != nil {
+		return err
+	}
+
+	return redis.Client.Set(ctx, key, newData, 0).Err()
+}
+
+func (s *InstanceStore) UpdateAccessURLs(id string, localURL string, friendlyURL string, status string) error {
+	ctx := context.Background()
+	key := instanceKey(id)
+
+	data, err := redis.Client.Get(ctx, key).Result()
+	if err != nil {
+		return errors.New("instance not found")
+	}
+
+	var instance Instance
+	if err := json.Unmarshal([]byte(data), &instance); err != nil {
+		return err
+	}
+
+	instance.LocalURL = localURL
+	instance.FriendlyURL = friendlyURL
+	if strings.TrimSpace(status) != "" {
+		instance.Status = status
+	}
 
 	newData, err := json.Marshal(instance)
 	if err != nil {

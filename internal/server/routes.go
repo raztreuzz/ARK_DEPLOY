@@ -20,7 +20,7 @@ func RegisterRoutes(r *gin.Engine, cfg config.Config, productStore *storage.Prod
 	})
 
 	routeStore := storage.NewRouteStore()
-	ih := instances.NewHandler(routeStore)
+	ih := instances.NewHandler(routeStore, instanceStore)
 	ih.RegisterRoutes(r)
 
 	api := r.Group("/api")
