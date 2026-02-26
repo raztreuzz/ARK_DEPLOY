@@ -33,7 +33,7 @@ pipeline {
       steps {
         sh '''
           set -eu
-          cat > inventory.instance.ini <<EOF
+          cat > ci/inventory.instance.ini <<EOF
 [ark_clients]
 client ansible_host=${TARGET_HOST} ansible_user=${SSH_USER}
 EOF
@@ -45,7 +45,7 @@ EOF
       steps {
         ansiblePlaybook(
           playbook: 'ci/deploy_instance.yml',
-          inventory: 'inventory.instance.ini',
+          inventory: 'ci/inventory.instance.ini',
           credentialsId: "${SSH_KEY_ID}",
           extraVars: [
             instance_id: "${INSTANCE_ID}",
