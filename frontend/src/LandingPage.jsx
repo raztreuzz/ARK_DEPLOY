@@ -224,29 +224,16 @@ export default function ArkLanding() {
   };
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
-  const deviceOptions = devices
-    .map((d) => {
-      const host = pickTargetHost(d);
-      if (!host) return null;
-      const name = d?.hostname || d?.name || host;
-      const online = isDeviceOnline(d);
-      return { host, name, online };
-    })
-    .filter(Boolean);
-
   useEffect(() => {
-    if (!deviceOptions.length) return;
-    const hasCurrent = deviceOptions.some((d) => d.host === selectedHost);
-    if (hasCurrent) return;
-
-    const preferredFromActive = activeDeployment?.targetHost || '';
-    const preferredFromStorage = localStorage.getItem(LAST_TARGET_HOST_KEY) || '';
-    const preferred = preferredFromActive || preferredFromStorage;
-    const byPreferred = deviceOptions.find((d) => d.host === preferred);
-    const byOnline = deviceOptions.find((d) => d.online);
-    const fallback = byPreferred || byOnline || deviceOptions[0];
-    if (fallback?.host) setSelectedHost(fallback.host);
-  }, [deviceOptions, selectedHost, activeDeployment]);
+    const fallbackHost = devices.map((d) => pickTargetHost(d)).find(Boolean) || '';
+    if (!selectedHost && fallbackHost) {
+      setSelectedHost(fallbackHost);
+      return;
+    }
+    if (selectedHost && currentDevice?.target_host && selectedHost !== currentDevice.target_host) {
+      setSelectedHost(currentDevice.target_host);
+    }
+  }, [devices, selectedHost, currentDevice]);
 
   if (loading) return <LoadingSkeleton />;
 
@@ -289,23 +276,6 @@ export default function ArkLanding() {
                       >
                         {products.map((p) => (
                           <option key={p.id} value={p.id}>{p.name} ({p.id})</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {deviceOptions.length > 0 && (
-                    <div className="w-full">
-                      <label className="block text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2 text-left">Destino (auto seleccionable)</label>
-                      <select
-                        value={selectedHost}
-                        onChange={(e) => setSelectedHost(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-200 outline-none focus:ring-1 ring-blue-500"
-                      >
-                        {deviceOptions.map((d) => (
-                          <option key={d.host} value={d.host}>
-                            {d.name} ({d.host}) {d.online ? '' : '[reachable]'}
-                          </option>
                         ))}
                       </select>
                     </div>
