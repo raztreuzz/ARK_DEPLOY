@@ -11,7 +11,6 @@ import (
 
 const baseURL = "http://localhost:5050"
 
-// TestHealthCheck prueba el endpoint de salud
 func TestHealthCheck(t *testing.T) {
 	resp, err := http.Get(baseURL + "/health")
 	if err != nil {
@@ -33,7 +32,6 @@ func TestHealthCheck(t *testing.T) {
 	t.Log("[PASS] Health check OK")
 }
 
-// TestListDevices prueba listar dispositivos de Tailscale
 func TestListDevices(t *testing.T) {
 	resp, err := http.Get(baseURL + "/api/tailscale/devices")
 	if err != nil {
@@ -64,9 +62,7 @@ func TestListDevices(t *testing.T) {
 	}
 }
 
-// TestGetDevice prueba obtener un dispositivo específico
 func TestGetDevice(t *testing.T) {
-	// Primero obtenemos la lista para tener un ID válido
 	resp, err := http.Get(baseURL + "/api/tailscale/devices")
 	if err != nil {
 		t.Skip("No se pudo obtener lista de dispositivos")
@@ -86,7 +82,6 @@ func TestGetDevice(t *testing.T) {
 
 	deviceID := listResult.Devices[0]["id"].(string)
 
-	// Ahora obtenemos el dispositivo específico
 	resp2, err := http.Get(baseURL + "/api/tailscale/devices/" + deviceID)
 	if err != nil {
 		t.Fatalf("Error al obtener dispositivo: %v", err)
@@ -104,7 +99,6 @@ func TestGetDevice(t *testing.T) {
 	t.Logf("[PASS] Dispositivo obtenido: %s (ID: %s)", device["name"], device["id"])
 }
 
-// TestGetNonExistentDevice prueba obtener un dispositivo que no existe
 func TestGetNonExistentDevice(t *testing.T) {
 	resp, err := http.Get(baseURL + "/api/tailscale/devices/nonexistent123")
 	if err != nil {
@@ -119,7 +113,6 @@ func TestGetNonExistentDevice(t *testing.T) {
 	t.Log("[PASS] Correctamente rechaza dispositivo inexistente")
 }
 
-// TestMain es el punto de entrada de los tests
 func TestMain(m *testing.M) {
 	if os.Getenv("RUN_INTEGRATION_TESTS") != "1" {
 		fmt.Println("Skipping integration tests (set RUN_INTEGRATION_TESTS=1 to enable).")
@@ -132,7 +125,6 @@ func TestMain(m *testing.M) {
 	fmt.Println()
 	fmt.Println("Verificando que el servidor esté corriendo...")
 
-	// Verificar que el servidor esté disponible
 	resp, err := http.Get(baseURL + "/health")
 	if err != nil {
 		fmt.Printf("[ERROR] El servidor no está disponible en %s\n", baseURL)
@@ -144,7 +136,6 @@ func TestMain(m *testing.M) {
 	fmt.Println("[OK] Servidor disponible")
 	fmt.Println()
 
-	// Ejecutar tests
 	code := m.Run()
 
 	fmt.Println()

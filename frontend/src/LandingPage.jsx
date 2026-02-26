@@ -5,7 +5,6 @@ import {
   Loader2, AlertCircle, Zap, ChevronDown, ChevronUp
 } from 'lucide-react';
 
-// --- CONFIGURACION Y CONSTANTES ---
 const PRODUCT_THEMES = {
   media: { icon: Globe, color: 'text-blue-400', bg: 'bg-blue-500/10' },
   db: { icon: Cpu, color: 'text-purple-400', bg: 'bg-purple-500/10' },
@@ -40,9 +39,7 @@ const isDeviceOnline = (d) => {
   return status === 'active' || status === 'online' || state === 'active' || state === 'online';
 };
 
-// --- COMPONENTE PRINCIPAL ---
 export default function ArkLanding() {
-  // Estados de Datos
   const [products, setProducts] = useState([]);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -51,7 +48,6 @@ export default function ArkLanding() {
   const [activeDeployment, setActiveDeployment] = useState(null);
   const [currentDevice, setCurrentDevice] = useState(null);
 
-  // Estados de UI
   const [isDeploying, setIsDeploying] = useState(false);
   const [error, setError] = useState(null);
   const [showLogs, setShowLogs] = useState(false);
@@ -62,7 +58,6 @@ export default function ArkLanding() {
     setDeployLogs((prev) => [...prev, `[${time}] ${msg}`]);
   };
 
-  // 1. Carga Inicial y Recuperacion de Sesion
   useEffect(() => {
     const init = async () => {
       dbg('Init start');
@@ -176,7 +171,6 @@ export default function ArkLanding() {
     }
   };
 
-  // 2. Logica de Despliegue
   const handleDeploy = async (product) => {
     if (isDeploying) return;
     dbg('Deploy click', product?.id, product?.name);
@@ -188,7 +182,6 @@ export default function ArkLanding() {
     pushDeployLog(`Solicitud de despliegue para ${product.name}`);
 
     try {
-      // Buscar host disponible
       const targetHost = selectedHost || '';
 
       if (!targetHost) {
@@ -280,7 +273,6 @@ export default function ArkLanding() {
           return { ready: true };
         }
       } catch (e) {
-        // keep polling
       }
 
       if (jobName && buildNumber) {
@@ -295,7 +287,6 @@ export default function ArkLanding() {
             }
           }
         } catch (e) {
-          // ignore transient errors
         }
       }
 
@@ -319,7 +310,6 @@ export default function ArkLanding() {
         friendlyUrl: hit.friendly_url || prev.friendlyUrl
       }) : prev);
     } catch (e) {
-      // ignore best-effort update
     }
   };
 
@@ -441,7 +431,6 @@ export default function ArkLanding() {
   );
 }
 
-// --- SUB-COMPONENTES ---
 
 const ProductIcon = ({ productId }) => {
   const themeKey = Object.keys(PRODUCT_THEMES).find((k) => productId.toLowerCase().includes(k)) || 'default';

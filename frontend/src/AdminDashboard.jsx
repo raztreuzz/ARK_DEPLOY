@@ -5,7 +5,6 @@ import {
   CheckCircle2, Globe, Cpu, X, Loader2
 } from 'lucide-react';
 
-// --- CONSTANTES Y CONFIGURACION ---
 const ENVS = ['PROD', 'DEV', 'TEST'];
 const INSTANCE_STATUS = {
   RUNNING: 'running',
@@ -16,7 +15,6 @@ const INSTANCE_STATUS = {
 
 const dbg = (...args) => console.log('[Admin]', ...args);
 
-// --- HOOK PRINCIPAL DE ESTADO ---
 function useAdminData() {
   const [products, setProducts] = useState([]);
   const [instances, setInstances] = useState([]);
@@ -70,7 +68,6 @@ function useAdminData() {
   return { products, instances, devices, sshUsers, setSSHUsers, jobsCatalog, loading, error, fetchData };
 }
 
-// --- COMPONENTE PRINCIPAL (Layout) ---
 export default function AdminDashboard() {
   const { products, instances, devices, sshUsers, setSSHUsers, jobsCatalog, loading, error, fetchData } = useAdminData();
   const [filter, setFilter] = useState('');
@@ -274,7 +271,6 @@ export default function AdminDashboard() {
   );
 }
 
-// --- COMPONENTES FASE 1 ---
 
 const TopBar = ({ filter, setFilter, onRefresh }) => (
   <nav className="sticky top-0 z-40 bg-[#020617]/80 backdrop-blur-md border-b border-slate-800 px-6 py-4">
@@ -488,7 +484,6 @@ const TailscaleNodesPanel = ({ devices, sshUsers, onSaveSSHUser }) => {
   );
 };
 
-// --- MODALES (FASE 1) ---
 
 const ProductFormModal = ({ product, jobOptions, onClose, onSave }) => {
   const [form, setForm] = useState(product?.id ? {
@@ -780,7 +775,6 @@ const ProductDeleteConfirmModal = ({ product, onClose, onConfirm }) => {
   );
 };
 
-// --- COMPONENTES AUXILIARES ---
 
 const StatusBadge = ({ status }) => {
   const cfg = {
@@ -838,7 +832,6 @@ const EmptyState = ({ message }) => (
   <div className="py-12 text-center text-slate-600 text-xs italic">{message}</div>
 );
 
-// --- FASE 2: MEJORAS ---
 
 const SystemLogConsole = () => {
   const [logs] = useState([

@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// MockInstanceStore para tests sin Redis
 type MockInstanceStore struct {
 	mu        sync.RWMutex
 	instances map[string]Instance
@@ -79,11 +78,9 @@ func (s *MockInstanceStore) Delete(id string) error {
 	return nil
 }
 
-// Tests
 func TestInstanceStore_CRUD(t *testing.T) {
 	store := NewMockInstanceStore()
 
-	// Create
 	instance := Instance{
 		ID:          "test-instance-1",
 		ProductID:   "ecommerce",
@@ -99,7 +96,6 @@ func TestInstanceStore_CRUD(t *testing.T) {
 		t.Fatalf("Failed to create instance: %v", err)
 	}
 
-	// GetByID
 	retrieved, err := store.GetByID("test-instance-1")
 	if err != nil {
 		t.Fatalf("Failed to get instance: %v", err)
@@ -109,13 +105,11 @@ func TestInstanceStore_CRUD(t *testing.T) {
 		t.Errorf("Retrieved instance data mismatch")
 	}
 
-	// GetAll
 	all := store.GetAll()
 	if len(all) < 1 {
 		t.Errorf("Expected at least 1 instance, got %d", len(all))
 	}
 
-	// UpdateStatus
 	if err := store.UpdateStatus("test-instance-1", "stopped"); err != nil {
 		t.Fatalf("Failed to update status: %v", err)
 	}
@@ -125,7 +119,6 @@ func TestInstanceStore_CRUD(t *testing.T) {
 		t.Errorf("Status not updated, got %s", updated.Status)
 	}
 
-	// Delete
 	if err := store.Delete("test-instance-1"); err != nil {
 		t.Fatalf("Failed to delete instance: %v", err)
 	}
@@ -148,7 +141,6 @@ func TestInstanceStore_DuplicateCreate(t *testing.T) {
 
 	store.Create(instance)
 
-	// Try to create duplicate
 	if err := store.Create(instance); err == nil {
 		t.Errorf("Expected error for duplicate instance, got nil")
 	}

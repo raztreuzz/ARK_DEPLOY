@@ -126,7 +126,8 @@ TAILSCALE_TAILNET=example.com
 - Nginx in ARK only forwards `/instances/...` to backend ARK (`:5050`)
 - Backend ARK resolves `instance_id -> target_host:target_port` from Redis
 - Upstream container keeps running on the client node, not on Vault
-- Public access remains: `http://<ARK_PUBLIC_HOST>:3000/instances/<instance_id>/`
+- Public access remains: `http://<ARK_PUBLIC_HOST>/instances/<instance_id>/`
+- Deploy callback also stores `local_url` and `friendly_url` for client access.
 
 ---
 
