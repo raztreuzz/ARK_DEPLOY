@@ -14,6 +14,7 @@ const PRODUCT_THEMES = {
 };
 
 const dbg = (...args) => console.log('[Landing]', ...args);
+const LAST_TARGET_HOST_KEY = 'ark:last_target_host';
 
 const pickTargetHost = (device) => {
   const normalize = (v) => String(v || '').trim().split('/')[0];
@@ -45,6 +46,7 @@ export default function ArkLanding() {
   const [selectedProductId, setSelectedProductId] = useState('');
   const [loading, setLoading] = useState(true);
   const [devices, setDevices] = useState([]);
+  const [selectedHost, setSelectedHost] = useState('');
   const [activeDeployment, setActiveDeployment] = useState(null);
 
   // Estados de UI
@@ -56,6 +58,8 @@ export default function ArkLanding() {
   useEffect(() => {
     const init = async () => {
       dbg('Init start');
+      const rememberedHost = localStorage.getItem(LAST_TARGET_HOST_KEY) || '';
+      if (rememberedHost) setSelectedHost(rememberedHost);
       await Promise.all([fetchProducts(), fetchDevices(), recoverDeployment()]);
       dbg('Init done');
       setLoading(false);
@@ -92,7 +96,12 @@ export default function ArkLanding() {
       if (res.ok) {
         const data = await res.json();
         dbg('Devices loaded', data.devices?.length || 0);
-        setDevices(data.devices || []);
+        const list = data.devices || [];
+        setDevices(list);
+        if (!selectedHost) {
+          const preferred = list.find((d) => isDeviceOnline(d) && pickTargetHost(d)) || list.find((d) => pickTargetHost(d));
+          if (preferred) setSelectedHost(pickTargetHost(preferred));
+        }
       }
     } catch (e) {
       console.error('[Landing] fetchDevices error', e);
@@ -115,8 +124,10 @@ export default function ArkLanding() {
             instanceId: last.id,
             url: last.url,
             status: last.status || 'success',
-            productName: last.product_id || 'Instancia Activa'
+            productName: last.product_id || 'Instancia Activa',
+            targetHost: last.device_id || ''
           });
+          if (last.device_id) setSelectedHost(last.device_id);
         }
       }
     } catch (e) {
@@ -135,9 +146,7 @@ export default function ArkLanding() {
 
     try {
       // Buscar host disponible
-      const targetDevice = devices.find((d) => isDeviceOnline(d) && pickTargetHost(d))
-        || devices.find((d) => pickTargetHost(d));
-      const targetHost = targetDevice ? pickTargetHost(targetDevice) : null;
+      const targetHost = selectedHost || '';
 
       if (!targetHost) {
         dbg('No target host from devices', devices.map((d) => ({
@@ -178,8 +187,10 @@ export default function ArkLanding() {
         instanceId: data.instance_id,
         url: data.url,
         status: 'success',
-        productName: product.name
+        productName: product.name,
+        targetHost: data.target_host || targetHost
       });
+      localStorage.setItem(LAST_TARGET_HOST_KEY, data.target_host || targetHost);
     } catch (err) {
       console.error('[Landing] handleDeploy error', err);
       setError(err.message);
@@ -193,6 +204,29 @@ export default function ArkLanding() {
   if (loading) return <LoadingSkeleton />;
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
+  const deviceOptions = devices
+    .map((d) => {
+      const host = pickTargetHost(d);
+      if (!host) return null;
+      const name = d?.hostname || d?.name || host;
+      const online = isDeviceOnline(d);
+      return { host, name, online };
+    })
+    .filter(Boolean);
+
+  useEffect(() => {
+    if (!deviceOptions.length) return;
+    const hasCurrent = deviceOptions.some((d) => d.host === selectedHost);
+    if (hasCurrent) return;
+
+    const preferredFromActive = activeDeployment?.targetHost || '';
+    const preferredFromStorage = localStorage.getItem(LAST_TARGET_HOST_KEY) || '';
+    const preferred = preferredFromActive || preferredFromStorage;
+    const byPreferred = deviceOptions.find((d) => d.host === preferred);
+    const byOnline = deviceOptions.find((d) => d.online);
+    const fallback = byPreferred || byOnline || deviceOptions[0];
+    if (fallback?.host) setSelectedHost(fallback.host);
+  }, [deviceOptions, selectedHost, activeDeployment]);
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 selection:bg-blue-500/30">
@@ -225,6 +259,19 @@ export default function ArkLanding() {
                           <option key={p.id} value={p.id}>{p.name} ({p.id})</option>
                         ))}
                       </select>
+                    </div>
+                  )}
+
+                  {deviceOptions.length > 0 && (
+                    <div className="w-full">
+                      <label className="block text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2 text-left">Destino automatico</label>
+                      <div className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-200">
+                        {(() => {
+                          const current = deviceOptions.find((d) => d.host === selectedHost);
+                          if (!current) return 'Resolviendo nodo...';
+                          return `${current.name} (${current.host})`;
+                        })()}
+                      </div>
                     </div>
                   )}
 

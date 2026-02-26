@@ -35,15 +35,23 @@ function useAdminData() {
         fetch('/api/deployments').then((r) => (r.ok ? r.json() : Promise.reject('Error en instancias'))),
         fetch('/api/tailscale/devices').then((r) => (r.ok ? r.json() : { devices: [] })).catch(() => ({ devices: [] }))
       ]);
-      const jobsRes = await fetch('/api/jobs').then((r) => (r.ok ? r.json() : { jobs: [] })).catch(() => ({ jobs: [] }));
+      const derivedJobs = new Set();
+      (pRes.products || []).forEach((p) => {
+        Object.values(p.deploy_jobs || {}).forEach((j) => {
+          const v = String(j || '').trim();
+          if (v) derivedJobs.add(v);
+        });
+        const del = String(p.delete_job || '').trim();
+        if (del) derivedJobs.add(del);
+      });
       dbg('products loaded', pRes.products?.length || 0);
       dbg('instances loaded', iRes.instances?.length || 0);
       dbg('devices loaded', dRes.devices?.length || 0);
-      dbg('jobs loaded', jobsRes.jobs?.length || 0);
+      dbg('jobs loaded (derived)', derivedJobs.size);
       setProducts(pRes.products || []);
       setInstances(iRes.instances || []);
       setDevices(dRes.devices || []);
-      setJobsCatalog(jobsRes.jobs || []);
+      setJobsCatalog(Array.from(derivedJobs));
     } catch (err) {
       console.error('[Admin] fetchData error', err);
       setError(err.toString());
@@ -548,7 +556,7 @@ const ProductFormModal = ({ product, jobOptions, onClose, onSave }) => {
               </div>
             ) : (
               <div className="text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl p-3">
-                No hay jobs disponibles desde Jenkins (/api/jobs).
+                No hay jobs disponibles en el catalogo actual de productos.
               </div>
             )}
           </div>
