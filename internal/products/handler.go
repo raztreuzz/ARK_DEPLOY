@@ -33,6 +33,7 @@ type CreateProductRequest struct {
 	ID          string            `json:"id" binding:"required"`
 	Name        string            `json:"name" binding:"required"`
 	Description string            `json:"description"`
+	ReleaseTag  string            `json:"release_tag"`
 	DeployJobs  map[string]string `json:"deploy_jobs" binding:"required"`
 	DeleteJob   string            `json:"delete_job" binding:"required"`
 	WebService  string            `json:"web_service"`
@@ -55,6 +56,7 @@ func (h *Handler) Create(c *gin.Context) {
 		ID:          strings.TrimSpace(req.ID),
 		Name:        strings.TrimSpace(req.Name),
 		Description: strings.TrimSpace(req.Description),
+		ReleaseTag:  strings.TrimSpace(req.ReleaseTag),
 		DeployJobs:  normalizeDeployJobs(req.DeployJobs),
 		DeleteJob:   strings.TrimSpace(req.DeleteJob),
 		WebService:  strings.TrimSpace(req.WebService),
@@ -92,6 +94,7 @@ func (h *Handler) Get(c *gin.Context) {
 type UpdateProductRequest struct {
 	Name        string            `json:"name" binding:"required"`
 	Description string            `json:"description"`
+	ReleaseTag  string            `json:"release_tag"`
 	DeployJobs  map[string]string `json:"deploy_jobs" binding:"required"`
 	DeleteJob   string            `json:"delete_job" binding:"required"`
 	WebService  string            `json:"web_service"`
@@ -116,6 +119,7 @@ func (h *Handler) Update(c *gin.Context) {
 		ID:          id,
 		Name:        strings.TrimSpace(req.Name),
 		Description: strings.TrimSpace(req.Description),
+		ReleaseTag:  strings.TrimSpace(req.ReleaseTag),
 		DeployJobs:  normalizeDeployJobs(req.DeployJobs),
 		DeleteJob:   strings.TrimSpace(req.DeleteJob),
 		WebService:  strings.TrimSpace(req.WebService),

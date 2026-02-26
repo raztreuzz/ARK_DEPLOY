@@ -14,6 +14,7 @@ type Product struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
 	Description string            `json:"description"`
+	ReleaseTag  string            `json:"release_tag,omitempty"`
 	DeployJobs  map[string]string `json:"deploy_jobs"`
 	DeleteJob   string            `json:"delete_job"`
 	WebService  string            `json:"web_service,omitempty"`
@@ -148,6 +149,7 @@ func normalizeProduct(p Product) Product {
 	p.ID = strings.TrimSpace(p.ID)
 	p.Name = strings.TrimSpace(p.Name)
 	p.Description = strings.TrimSpace(p.Description)
+	p.ReleaseTag = strings.TrimSpace(p.ReleaseTag)
 	p.DeleteJob = strings.TrimSpace(p.DeleteJob)
 	p.WebService = strings.TrimSpace(p.WebService)
 

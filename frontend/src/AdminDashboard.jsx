@@ -104,6 +104,7 @@ export default function AdminDashboard() {
       id: formData.id?.trim(),
       name: formData.name?.trim(),
       description: formData.description?.trim() || '',
+      release_tag: formData.release_tag?.trim() || '',
       deploy_jobs: formData.deploy_jobs || {},
       delete_job: formData.delete_job?.trim() || '',
       web_service: formData.web_service_enabled ? (formData.web_service?.trim() || 'web') : '',
@@ -426,10 +427,13 @@ const TailscaleNodesPanel = ({ devices, sshUsers, onSaveSSHUser }) => {
         {devices.map((d, idx) => {
           const host = d.hostname || d.name || `device-${idx + 1}`;
           const normalize = (v) => String(v || '').trim().split('/')[0];
-          const ip = (Array.isArray(d.addresses) && d.addresses.length > 0 ? normalize(d.addresses[0]) : normalize(d.ip)) || 'N/A';
+          const tsHost = Array.isArray(d.addresses)
+            ? d.addresses.map(normalize).find((a) => /^100\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(a)) || ''
+            : '';
+          const ip = tsHost || normalize(d.ip) || 'N/A';
           const status = String(d.status || '').toLowerCase();
           const state = String(d.state || '').toLowerCase();
-          const hasTSIP = /^100\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip);
+          const hasTSIP = /^100\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(tsHost || ip);
           const online = d.online === true || d.active === true || status === 'active' || status === 'online' || state === 'active' || state === 'online';
           const lastSeen = d.lastSeen ? new Date(d.lastSeen).getTime() : 0;
           const recentlySeen = lastSeen > 0 && (Date.now() - lastSeen) < 10 * 60 * 1000;
@@ -456,18 +460,18 @@ const TailscaleNodesPanel = ({ devices, sshUsers, onSaveSSHUser }) => {
               {hasTSIP && (
                 <div className="flex items-center gap-2">
                   <input
-                    value={getDraft(ip)}
-                    onChange={(e) => setDraftUsers((prev) => ({ ...prev, [ip]: e.target.value }))}
+                    value={getDraft(tsHost || ip)}
+                    onChange={(e) => setDraftUsers((prev) => ({ ...prev, [tsHost || ip]: e.target.value }))}
                     placeholder="ssh user (ej: SARA, ubuntu, root)"
                     className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs outline-none"
                   />
                   <button
                     type="button"
-                    onClick={() => handleSave(ip)}
-                    disabled={savingHost === ip}
+                    onClick={() => handleSave(tsHost || ip)}
+                    disabled={savingHost === (tsHost || ip)}
                     className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-[10px] font-black uppercase tracking-widest"
                   >
-                    {savingHost === ip ? 'Guardando' : 'Guardar'}
+                    {savingHost === (tsHost || ip) ? 'Guardando' : 'Guardar'}
                   </button>
                 </div>
               )}
@@ -496,14 +500,16 @@ const ProductFormModal = ({ product, jobOptions, onClose, onSave }) => {
     },
     web_service_enabled: Boolean(product.web_service),
     web_service: product.web_service || 'web',
-    web_port: product.web_port || 80
+    web_port: product.web_port || 80,
+    release_tag: product.release_tag || ''
   } : {
     id: '', name: '', description: '',
     deploy_jobs: { PROD: '', DEV: '', TEST: '' },
     delete_job: '',
     web_service_enabled: false,
     web_service: 'web',
-    web_port: 80
+    web_port: 80,
+    release_tag: ''
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -546,6 +552,13 @@ const ProductFormModal = ({ product, jobOptions, onClose, onSave }) => {
               className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs outline-none focus:ring-1 ring-blue-500 h-20"
             />
           </div>
+
+          <FormField
+            label="Tag de Release"
+            value={form.release_tag}
+            onChange={(v) => setForm({ ...form, release_tag: v })}
+            placeholder="ej: estable, beta, fase-prueba, v1.2.0"
+          />
 
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-4">

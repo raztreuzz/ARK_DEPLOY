@@ -263,14 +263,18 @@ export default function ArkLanding() {
 
                   {deviceOptions.length > 0 && (
                     <div className="w-full">
-                      <label className="block text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2 text-left">Destino automatico</label>
-                      <div className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-200">
-                        {(() => {
-                          const current = deviceOptions.find((d) => d.host === selectedHost);
-                          if (!current) return 'Resolviendo nodo...';
-                          return `${current.name} (${current.host})`;
-                        })()}
-                      </div>
+                      <label className="block text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2 text-left">Destino (auto seleccionable)</label>
+                      <select
+                        value={selectedHost}
+                        onChange={(e) => setSelectedHost(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-200 outline-none focus:ring-1 ring-blue-500"
+                      >
+                        {deviceOptions.map((d) => (
+                          <option key={d.host} value={d.host}>
+                            {d.name} ({d.host}) {d.online ? '' : '[reachable]'}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
 
@@ -280,7 +284,9 @@ export default function ArkLanding() {
                     <h2 className="text-2xl font-bold text-white tracking-tight">
                       {selectedProduct.name}
                     </h2>
-                    <p className="text-[10px] font-mono text-slate-500 uppercase tracking-[0.2em]">Version Estable</p>
+                    <p className="text-[10px] font-mono text-slate-500 uppercase tracking-[0.2em]">
+                      {selectedProduct.release_tag || 'Version Estable'}
+                    </p>
                   </div>
 
                   <button
