@@ -12,6 +12,8 @@ type Device struct {
 	Name            string    `json:"name"`
 	Hostname        string    `json:"hostname"`
 	Addresses       []string  `json:"addresses"`
+	User            any       `json:"user,omitempty"`
+	Owner           any       `json:"owner,omitempty"`
 	OS              string    `json:"os"`
 	Created         time.Time `json:"created"`
 	LastSeen        time.Time `json:"lastSeen"`

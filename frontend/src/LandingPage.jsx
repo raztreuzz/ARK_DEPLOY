@@ -48,6 +48,7 @@ export default function ArkLanding() {
   const [devices, setDevices] = useState([]);
   const [selectedHost, setSelectedHost] = useState('');
   const [activeDeployment, setActiveDeployment] = useState(null);
+  const [currentDevice, setCurrentDevice] = useState(null);
 
   // Estados de UI
   const [isDeploying, setIsDeploying] = useState(false);
@@ -60,7 +61,7 @@ export default function ArkLanding() {
       dbg('Init start');
       const rememberedHost = localStorage.getItem(LAST_TARGET_HOST_KEY) || '';
       if (rememberedHost) setSelectedHost(rememberedHost);
-      await Promise.all([fetchProducts(), fetchDevices(), recoverDeployment()]);
+      await Promise.all([fetchProducts(), fetchDevices(), recoverDeployment(), fetchCurrentDevice()]);
       dbg('Init done');
       setLoading(false);
     };
@@ -105,6 +106,28 @@ export default function ArkLanding() {
       }
     } catch (e) {
       console.error('[Landing] fetchDevices error', e);
+    }
+  };
+
+  const fetchCurrentDevice = async () => {
+    try {
+      dbg('GET /api/tailscale/current');
+      const res = await fetch('/api/tailscale/current');
+      dbg('GET /api/tailscale/current status', res.status);
+      if (!res.ok) return;
+      const data = await res.json();
+      dbg('Current Device', {
+        found: data.found,
+        client_ip: data.client_ip,
+        target_host: data.target_host,
+        tailscale_user: data.tailscale_user
+      });
+      setCurrentDevice(data);
+      if (data?.target_host) {
+        setSelectedHost(data.target_host);
+      }
+    } catch (e) {
+      console.error('[Landing] fetchCurrentDevice error', e);
     }
   };
 
@@ -246,6 +269,16 @@ export default function ArkLanding() {
             {selectedProduct ? (
               <div className="bg-slate-900 border border-slate-800 p-8 rounded-[2.5rem] shadow-2xl shadow-black/50 animate-in fade-in zoom-in-95 duration-500">
                 <div className="flex flex-col items-center gap-6">
+                  {currentDevice?.client_ip && (
+                    <div className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-200">
+                      <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">Current Device</div>
+                      <div className="font-mono">{currentDevice.client_ip}</div>
+                      <div className="text-slate-400">
+                        {currentDevice.tailscale_user ? `User: ${currentDevice.tailscale_user}` : 'User: N/A'}
+                      </div>
+                    </div>
+                  )}
+
                   {products.length > 1 && (
                     <div className="w-full">
                       <label className="block text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2 text-left">Producto</label>

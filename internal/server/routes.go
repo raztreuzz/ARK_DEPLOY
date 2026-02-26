@@ -45,6 +45,7 @@ func RegisterRoutes(r *gin.Engine, cfg config.Config, productStore *storage.Prod
 	tsClient := tailscale.NewClient(cfg.TailscaleAPIKey, cfg.TailscaleTailnet)
 	tsHandler := tailscale.NewHandler(tsClient)
 	api.GET("/tailscale/devices", tsHandler.ListDevices)
+	api.GET("/tailscale/current", tsHandler.CurrentDevice)
 	api.GET("/tailscale/devices/:id", tsHandler.GetDevice)
 
 	sshUserHandler := sshusers.NewHandler(storage.NewSSHUserStore())
