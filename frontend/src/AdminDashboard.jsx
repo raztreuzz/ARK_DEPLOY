@@ -372,16 +372,31 @@ const TailscaleNodesPanel = ({ devices }) => (
     <div className="divide-y divide-slate-800/60">
       {devices.map((d, idx) => {
         const host = d.hostname || d.name || `device-${idx + 1}`;
-        const ip = (Array.isArray(d.addresses) && d.addresses[0]) || d.ip || 'N/A';
-        const online = d.online === true || d.active === true || String(d.status || '').toLowerCase() === 'active' || String(d.state || '').toLowerCase() === 'active';
+        const normalize = (v) => String(v || '').trim().split('/')[0];
+        const ip = (Array.isArray(d.addresses) && d.addresses.length > 0 ? normalize(d.addresses[0]) : normalize(d.ip)) || 'N/A';
+        const status = String(d.status || '').toLowerCase();
+        const state = String(d.state || '').toLowerCase();
+        const hasTSIP = /^100\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip);
+        const online = d.online === true || d.active === true || status === 'active' || status === 'online' || state === 'active' || state === 'online';
+        const lastSeen = d.lastSeen ? new Date(d.lastSeen).getTime() : 0;
+        const recentlySeen = lastSeen > 0 && (Date.now() - lastSeen) < 10 * 60 * 1000;
+        const reachable = !online && hasTSIP && recentlySeen;
+        const badgeClass = online
+          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+          : reachable
+            ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+            : 'bg-slate-800 text-slate-500 border-slate-700';
+        const badgeText = online ? 'Online' : (reachable ? 'Reachable' : 'Offline');
         return (
           <div key={`${host}-${ip}-${idx}`} className="px-4 py-3 flex items-center justify-between">
             <div>
               <div className="text-sm text-slate-200 font-semibold">{host}</div>
-              <div className="text-[10px] text-slate-500 font-mono">{ip}</div>
+              <div className="text-[10px] text-slate-500 font-mono">
+                {ip}{d.lastSeen ? ` · seen ${new Date(d.lastSeen).toLocaleTimeString()}` : ''}
+              </div>
             </div>
-            <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${online ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800 text-slate-500 border-slate-700'}`}>
-              {online ? 'Online' : 'Offline'}
+            <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${badgeClass}`}>
+              {badgeText}
             </span>
           </div>
         );

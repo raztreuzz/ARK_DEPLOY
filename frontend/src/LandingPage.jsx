@@ -16,12 +16,17 @@ const PRODUCT_THEMES = {
 const dbg = (...args) => console.log('[Landing]', ...args);
 
 const pickTargetHost = (device) => {
+  const normalize = (v) => String(v || '').trim().split('/')[0];
+  const isTS = (v) => /^100\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v);
+
   const fromAddresses = Array.isArray(device?.addresses)
-    ? device.addresses.find((a) => typeof a === 'string' && a.startsWith('100.'))
+    ? device.addresses.map(normalize).find((a) => isTS(a))
     : '';
   if (fromAddresses) return fromAddresses;
-  if (typeof device?.ip === 'string' && device.ip.startsWith('100.')) return device.ip;
-  if (typeof device?.target_host === 'string' && device.target_host.startsWith('100.')) return device.target_host;
+  const ip = normalize(device?.ip);
+  if (isTS(ip)) return ip;
+  const targetHost = normalize(device?.target_host);
+  if (isTS(targetHost)) return targetHost;
   return '';
 };
 
@@ -130,7 +135,8 @@ export default function ArkLanding() {
 
     try {
       // Buscar host disponible
-      const targetDevice = devices.find((d) => isDeviceOnline(d) && pickTargetHost(d));
+      const targetDevice = devices.find((d) => isDeviceOnline(d) && pickTargetHost(d))
+        || devices.find((d) => pickTargetHost(d));
       const targetHost = targetDevice ? pickTargetHost(targetDevice) : null;
 
       if (!targetHost) {
