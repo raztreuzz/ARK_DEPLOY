@@ -64,7 +64,22 @@
       ansible.builtin.shell: |
         set -eu
         cd "{{ product_dst }}"
-        docker compose --project-name "{{ instance_id }}" pull
+        tries=0
+        max_tries=3
+        while [ "$tries" -lt "$max_tries" ]; do
+          if docker compose --project-name "{{ instance_id }}" pull; then
+            exit 0
+          fi
+          tries=$((tries + 1))
+          sleep 5
+        done
+
+        # Si GHCR falla temporalmente, continuamos solo si las imagenes ya existen localmente.
+        docker image inspect ghcr.io/raztreuzz/vault_go:prod >/dev/null 2>&1 && \
+        docker image inspect ghcr.io/raztreuzz/vault_frontend:mem-enhancements >/dev/null 2>&1 && exit 0
+
+        echo "compose pull fallo y no hay imagenes locales disponibles"
+        exit 1
       args:
         executable: /bin/sh
 
