@@ -53,6 +53,7 @@ export default function ArkLanding() {
   const [devices, setDevices] = useState([]);
   const [selectedHost, setSelectedHost] = useState('');
   const [activeDeployment, setActiveDeployment] = useState(null);
+  const [deviceDeployments, setDeviceDeployments] = useState([]);
   const [currentDevice, setCurrentDevice] = useState(null);
 
   const [isDeploying, setIsDeploying] = useState(false);
@@ -145,6 +146,7 @@ export default function ArkLanding() {
       if (!targetHost) {
         dbg('recoverDeployment skipped: missing targetHost');
         setActiveDeployment(null);
+        setDeviceDeployments([]);
         return;
       }
       dbg('GET /api/deployments (recover)', targetHost);
@@ -154,6 +156,18 @@ export default function ArkLanding() {
         const data = await res.json();
         const list = data.instances || [];
         const hostInstances = list.filter((item) => item.device_id === targetHost);
+        setDeviceDeployments(
+          hostInstances.map((item) => ({
+            instanceId: item.id,
+            productId: item.product_id || '',
+            productName: item.product_id || 'Instancia',
+            status: item.status || '',
+            url: item.url || '',
+            localUrl: item.local_url || '',
+            friendlyUrl: buildFriendlyURL(item.id, item.friendly_url),
+            targetHost: item.device_id || ''
+          }))
+        );
         const productInstances = productID
           ? hostInstances.filter((item) => String(item.product_id || '').trim() === String(productID).trim())
           : hostInstances;
@@ -179,6 +193,7 @@ export default function ArkLanding() {
       }
     } catch (e) {
       console.log('[Landing] No se encontraron despliegues previos.');
+      setDeviceDeployments([]);
     }
   };
 
@@ -467,6 +482,37 @@ export default function ArkLanding() {
               status={activeDeployment.status}
               logs={deployLogs}
             />
+          </div>
+        )}
+
+        {deviceDeployments.length > 0 && (
+          <div className="mt-8 border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 bg-slate-900/50 text-xs font-bold text-slate-400 uppercase tracking-widest">
+              Instancias desplegadas en este dispositivo
+            </div>
+            <div className="p-4 space-y-3 bg-slate-950/40">
+              {deviceDeployments.map((inst) => {
+                const accessURL = pickAccessURL(inst);
+                return (
+                  <a
+                    key={inst.instanceId}
+                    href={accessURL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block p-4 rounded-xl border border-slate-800 hover:border-blue-500/40 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-white">{inst.productName}</p>
+                        <p className="text-[10px] font-mono text-slate-500">ID: {inst.instanceId}</p>
+                      </div>
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-slate-400">{inst.status || 'N/A'}</span>
+                    </div>
+                    <p className="mt-2 font-mono text-xs text-blue-400 truncate">{accessURL}</p>
+                  </a>
+                );
+              })}
+            </div>
           </div>
         )}
       </main>
