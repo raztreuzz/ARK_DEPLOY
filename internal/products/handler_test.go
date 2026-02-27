@@ -331,6 +331,49 @@ func TestUpdateProduct(t *testing.T) {
 	assert.Equal(t, "new-job-prod", response.DeployJobs["prod"])
 }
 
+func TestUpdateProduct_RejectWebPortChange(t *testing.T) {
+	router, handler := setupTest()
+	router.PUT("/products/:id", handler.Update)
+
+	handler.store.Create(storage.Product{
+		ID:   "task-manager",
+		Name: "Task Manager Old",
+		DeployJobs: map[string]string{
+			"prod": "old-job-prod",
+			"dev":  "old-job-dev",
+			"test": "old-job-test",
+		},
+		DeleteJob: "delete-task-manager",
+		WebPort:   80,
+	})
+
+	payload := UpdateProductRequest{
+		Name:        "Task Manager Updated",
+		Description: "Nueva descripción",
+		DeployJobs: map[string]string{
+			"prod": "new-job-prod",
+			"dev":  "new-job-dev",
+			"test": "new-job-test",
+		},
+		DeleteJob: "delete-task-manager",
+		WebPort:   8080,
+	}
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPut, "/products/task-manager", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var response map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["detail"], "web_port cannot be changed")
+}
+
 func TestDeleteProduct(t *testing.T) {
 	router, handler := setupTest()
 	router.DELETE("/products/:id", handler.Delete)

@@ -16,6 +16,7 @@ type queueItemResp struct {
 	} `json:"executable"`
 	Cancelled bool `json:"cancelled"`
 }
+//Obtenemos el numero del build a traves de la url de la cola y verificamos si fue cancelada o no
 
 func (c *Client) ReadQueueItem(queueURL string) (int, bool, error) {
 	u := strings.TrimRight(queueURL, "/") + "/api/json"
@@ -53,11 +54,14 @@ func (c *Client) ReadQueueItem(queueURL string) (int, bool, error) {
 	return qi.Executable.Number, false, nil
 }
 
+//creamos el espacio para obtener el numero
 type buildStatusResp struct {
 	Building bool   `json:"building"`
 	Result   string `json:"result"`
 	Number   int    `json:"number"`
 }
+
+//Leemos el status del build se verifica su status
 
 func (c *Client) ReadBuildStatus(jobName string, buildNumber int) (bool, string, error) {
 	u := fmt.Sprintf("%s/job/%s/%d/api/json",
@@ -91,6 +95,8 @@ func (c *Client) ReadBuildStatus(jobName string, buildNumber int) (bool, string,
 	return bs.Building, bs.Result, nil
 }
 
+//Leer logs del build 
+
 func (c *Client) ReadBuildLogs(jobName string, buildNumber int) (string, error) {
 	u := fmt.Sprintf("%s/job/%s/%d/consoleText",
 		c.baseURL,
@@ -123,6 +129,7 @@ func (c *Client) ReadBuildLogs(jobName string, buildNumber int) (string, error) 
 	return string(b), nil
 }
 
+//
 func (c *Client) ReadBuildNumberByQueueID(jobName string, queueID int) (int, error) {
 	u := fmt.Sprintf("%s/job/%s/api/json?tree=builds[number,queueId]{0,20}",
 		c.baseURL,

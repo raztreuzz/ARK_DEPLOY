@@ -15,10 +15,13 @@ import (
 	"ark_deploy/internal/jenkins"
 	"ark_deploy/internal/storage"
 )
+//Mapea si existen productos de almacenamiento 
 
 type ProductStore interface {
 	GetByID(id string) (storage.Product, error)
 }
+
+//Crud de instancias 
 
 type InstanceStore interface {
 	Create(i storage.Instance) error
@@ -26,6 +29,8 @@ type InstanceStore interface {
 	GetByID(id string) (storage.Instance, error)
 	Delete(id string) error
 }
+
+//Constructor 
 
 type Handler struct {
 	cfg           config.Config
@@ -41,6 +46,8 @@ func NewHandler(cfg config.Config, productStore ProductStore, instanceStore Inst
 	}
 }
 
+//Definimos contrato del endpoint
+
 type CreateDeploymentRequest struct {
 	ProductID    string `json:"product_id"`
 	Environment  string `json:"environment"`
@@ -49,9 +56,11 @@ type CreateDeploymentRequest struct {
 	Version      string `json:"version"`
 	TargetHost   string `json:"target_host" binding:"required"`
 	SSHUser      string `json:"ssh_user"`
-	SimulateFail bool   `json:"simulate_fail"`
+	SimulateFail bool   `json:"simulate_fail"` //flag para pruebas no lo quito por temas de desarrollo 
 }
 
+
+//Parseamos el json y validamos campos 
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateDeploymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -104,8 +113,10 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
+	 // En esta parte llamamos a jenkins para disparar el job correspondiente al; producto 
 	client := jenkins.NewClient(h.cfg.JenkinsBaseURL, h.cfg.JenkinsUser, h.cfg.JenkinsAPIToken)
 
+	//Logica para disparar el job 
 	var jobName string
 	var product storage.Product
 
@@ -152,6 +163,8 @@ func (h *Handler) Create(c *gin.Context) {
 	publicBase := strings.TrimRight(h.cfg.ARKPublicHost, "/")
 	callbackURL := publicBase + "/api/instances/register"
 
+	//Trigger del job 
+
 	queueURL, err := client.TriggerJobWithParams(jobName, map[string]string{
 		"INSTANCE_ID":      instanceID,
 		"PRODUCT_ID":       productID,
@@ -161,16 +174,20 @@ func (h *Handler) Create(c *gin.Context) {
 		"ARK_CALLBACK_URL": callbackURL,
 		"WEB_SERVICE":      webService,
 		"WEB_PORT":         strconv.Itoa(webPort),
-		"SIMULATE_FAIL":    boolToString(req.SimulateFail),
+		"SIMULATE_FAIL":    boolToString(req.SimulateFail), //flag para pruebas no lo quito por temas de desarrollo
 	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"detail": err.Error()})
 		return
 	}
 
+	//esto manda a ver el status de la instancia esperando a que este lista para mostrar el lin
+
 	buildNumber, resolved := h.tryResolveBuildNumber(client, jobName, queueURL)
 
 	instanceURL := publicBase + "/instances/" + instanceID + "/"
+
+	//guardamos la instancia 
 
 	instance := storage.Instance{
 		ID:          instanceID,
@@ -213,6 +230,8 @@ func (h *Handler) Create(c *gin.Context) {
 	})
 }
 
+//Lista las instancias
+
 func (h *Handler) List(c *gin.Context) {
 	instances := h.instanceStore.GetAll()
 
@@ -246,6 +265,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		"device_id":   instance.DeviceID,
 	})
 }
+//Logs del build 
 
 func (h *Handler) GetLogs(c *gin.Context) {
 	instanceID := c.Param("id")
@@ -275,6 +295,8 @@ func (h *Handler) GetLogs(c *gin.Context) {
 			logsMap[jobName] = log
 		}
 	}
+
+	//Contruccion de respuesta de logs con metadata
 
 	c.JSON(http.StatusOK, gin.H{
 		"instance_id": instanceID,

@@ -20,7 +20,7 @@ pipeline {
 
   stages {
 
-    stage('Validate') {
+    stage('Validar') {
       steps {
         sh '''
           set -eu
@@ -34,7 +34,7 @@ pipeline {
       }
     }
 
-    stage('Create Inventory') {
+    stage('Crear Inventario') {
       steps {
         sh '''
           set -eu
@@ -46,7 +46,7 @@ EOF
       }
     }
 
-    stage('Deploy (Ansible -> Client Docker Compose)') {
+    stage('Desplegar (Ansible -> Docker Compose en Cliente)') {
       steps {
         ansiblePlaybook(
           playbook: 'ci/deploy_instance.yml',
@@ -61,7 +61,7 @@ EOF
       }
     }
 
-    stage('Resolve Web Port (Client)') {
+    stage('Resolver Puerto Web (Cliente)') {
       steps {
         sshagent(credentials: ["${SSH_KEY_ID}"]) {
           sh '''
@@ -93,72 +93,7 @@ EOF
       }
     }
 
-    stage('Configure Local Reverse Proxy (Client)') {
-      steps {
-        sshagent(credentials: ["${SSH_KEY_ID}"]) {
-          sh '''
-            set -eu
-
-            PORT="$(cat target_port.txt)"
-            SAFE_PRODUCT="$(echo "${PRODUCT_ID}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')"
-            SHORT_ID="$(echo "${INSTANCE_ID}" | cut -c1-8)"
-            FRIENDLY_HOST="${SAFE_PRODUCT}-${SHORT_ID}.localhost"
-            REMOTE_BASE_DIR="/home/${SSH_USER}/.ark/local-proxy"
-
-            set +e
-            ssh -o StrictHostKeyChecking=no ${SSH_USER}@${TARGET_HOST} "FRIENDLY_HOST='${FRIENDLY_HOST}' PORT='${PORT}' REMOTE_BASE_DIR='${REMOTE_BASE_DIR}' INSTANCE_ID='${INSTANCE_ID}' bash -s" <<'REMOTE_EOF'
-              set -eu
-              mkdir -p "${REMOTE_BASE_DIR}/conf.d"
-              cat > "${REMOTE_BASE_DIR}/nginx.conf" <<'NGINX_MAIN'
-events {}
-http {
-  include       /etc/nginx/mime.types;
-  default_type  application/octet-stream;
-  sendfile      on;
-  keepalive_timeout 65;
-  include /etc/nginx/conf.d/*.conf;
-}
-NGINX_MAIN
-              cat > "${REMOTE_BASE_DIR}/conf.d/${INSTANCE_ID}.conf" <<'NGINX_SITE'
-server {
-  listen 127.0.0.1:80;
-  server_name __FRIENDLY_HOST__;
-  location / {
-    proxy_pass http://127.0.0.1:__PORT__;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-  }
-}
-NGINX_SITE
-              sed -i "s/__FRIENDLY_HOST__/${FRIENDLY_HOST}/g; s/__PORT__/${PORT}/g" "${REMOTE_BASE_DIR}/conf.d/${INSTANCE_ID}.conf"
-              if docker ps -a --format '{{.Names}}' | grep -qx 'ark-local-proxy'; then
-                docker rm -f ark-local-proxy >/dev/null 2>&1 || true
-              fi
-              docker run -d --name ark-local-proxy --restart unless-stopped --network host \
-                -v "${REMOTE_BASE_DIR}/nginx.conf:/etc/nginx/nginx.conf:ro" \
-                -v "${REMOTE_BASE_DIR}/conf.d:/etc/nginx/conf.d:ro" \
-                nginx:1.27-alpine >/dev/null
-              docker exec ark-local-proxy nginx -t >/dev/null
-              curl -fsS -H "Host: ${FRIENDLY_HOST}" http://127.0.0.1/ >/dev/null
-REMOTE_EOF
-            PROXY_RC=$?
-            set -e
-
-            if [ "$PROXY_RC" -eq 0 ]; then
-              echo "http://${FRIENDLY_HOST}/" > friendly_url.txt
-              echo "Local reverse proxy configured: http://${FRIENDLY_HOST}/"
-            else
-              echo "Local reverse proxy unavailable on client, continuing with localhost fallback."
-            fi
-          '''
-        }
-      }
-    }
-
-    stage('Register Route (ARK Gateway)') {
+    stage('Registrar Ruta (Gateway ARK)') {
       steps {
         sh '''
           set -eu
