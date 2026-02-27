@@ -15,6 +15,13 @@ const PRODUCT_THEMES = {
 const dbg = (...args) => console.log('[Landing]', ...args);
 const LAST_TARGET_HOST_KEY = 'ark:last_target_host';
 const pickAccessURL = (d) => d?.friendlyUrl || d?.localUrl || d?.url || '';
+const buildFriendlyURL = (instanceId, providedFriendlyURL) => {
+  const direct = String(providedFriendlyURL || '').trim();
+  if (direct) return direct;
+  const id = String(instanceId || '').trim();
+  if (id.length < 8) return '';
+  return `${window.location.origin}/instances/by-short/${id.slice(0, 8)}/`;
+};
 
 const pickTargetHost = (device) => {
   const normalize = (v) => String(v || '').trim().split('/')[0];
@@ -155,7 +162,7 @@ export default function ArkLanding() {
             instanceId: last.id,
             url: last.url,
             localUrl: last.local_url || '',
-            friendlyUrl: last.friendly_url || '',
+            friendlyUrl: buildFriendlyURL(last.id, last.friendly_url),
             status: last.status || 'success',
             productName: last.product_id || 'Instancia Activa',
             targetHost: last.device_id || ''
@@ -223,7 +230,7 @@ export default function ArkLanding() {
         instanceId: data.instance_id,
         url: data.url,
         localUrl: data.local_url || '',
-        friendlyUrl: data.friendly_url || '',
+        friendlyUrl: buildFriendlyURL(data.instance_id, data.friendly_url),
         status: 'running',
         productName: product.name,
         targetHost: data.target_host || targetHost,
@@ -245,10 +252,14 @@ export default function ArkLanding() {
         await refreshDeploymentAccess(data.instance_id);
         pushDeployLog('Instancia lista y accesible.');
         setActiveDeployment((prev) => prev ? ({ ...prev, status: 'success' }) : prev);
-      } else {
-        pushDeployLog('La instancia no quedo lista dentro del tiempo esperado.');
+      } else if (waitResult.buildFailed) {
+        pushDeployLog('Jenkins reporto fallo del build.');
         setActiveDeployment((prev) => prev ? ({ ...prev, status: 'failed' }) : prev);
-        setError('El despliegue sigue en proceso o fallo. Revisa logs de Jenkins/Admin.');
+        setError('El despliegue fallo. Revisa logs de Jenkins/Admin.');
+      } else {
+        pushDeployLog('La instancia sigue en proceso. El build puede tardar varios minutos.');
+        setActiveDeployment((prev) => prev ? ({ ...prev, status: 'running' }) : prev);
+        setError('Despliegue en progreso: aun no termina, revisa logs y vuelve a intentar en unos minutos.');
       }
     } catch (err) {
       console.error('[Landing] handleDeploy error', err);
@@ -264,9 +275,11 @@ export default function ArkLanding() {
   const waitForInstanceReady = async ({ instanceURL, jobName, buildNumber }) => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let lastBuildState = '';
+    let buildFailed = false;
 
-    for (let i = 1; i <= 25; i += 1) {
-      pushDeployLog(`Chequeo ${i}/25: verificando ruta de instancia...`);
+    const maxChecks = 90;
+    for (let i = 1; i <= maxChecks; i += 1) {
+      pushDeployLog(`Chequeo ${i}/${maxChecks}: verificando ruta de instancia...`);
       try {
         const r = await fetch(instanceURL, { method: 'GET', cache: 'no-store' });
         if (r.status !== 404 && r.status !== 502) {
@@ -285,6 +298,13 @@ export default function ArkLanding() {
               lastBuildState = now;
               pushDeployLog(`Jenkins: status=${s.status || 'N/A'} result=${s.result || 'N/A'}`);
             }
+            const status = String(s.status || '').toLowerCase();
+            const result = String(s.result || '').toLowerCase();
+            const building = s.building === true || status === 'running';
+            if (!building && result && result !== 'success' && result !== 'null') {
+              buildFailed = true;
+              break;
+            }
           }
         } catch (e) {
         }
@@ -293,7 +313,7 @@ export default function ArkLanding() {
       await sleep(2000);
     }
 
-    return { ready: false };
+    return { ready: false, buildFailed };
   };
 
   const refreshDeploymentAccess = async (instanceID) => {
@@ -307,7 +327,7 @@ export default function ArkLanding() {
         ...prev,
         url: hit.url || prev.url,
         localUrl: hit.local_url || prev.localUrl,
-        friendlyUrl: hit.friendly_url || prev.friendlyUrl
+        friendlyUrl: buildFriendlyURL(hit.id || prev.instanceId, hit.friendly_url || prev.friendlyUrl)
       }) : prev);
     } catch (e) {
     }
