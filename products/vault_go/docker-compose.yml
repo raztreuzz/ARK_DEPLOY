@@ -14,6 +14,8 @@ services:
       - data:/data
     ports:
       - "0:${API_PORT}"
+    networks:
+      - ark_shared
 
   web:
     image: ghcr.io/raztreuzz/vault_frontend:mem-enhancements
@@ -23,6 +25,13 @@ services:
       - "0:80"
     depends_on:
       - api
+    networks:
+      - ark_shared
 
 volumes:
    data:
+
+networks:
+  ark_shared:
+    external: true
+    name: ark_shared
