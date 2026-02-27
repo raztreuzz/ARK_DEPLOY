@@ -140,7 +140,7 @@ export default function ArkLanding() {
     }
   };
 
-  const recoverDeployment = async (targetHost) => {
+  const recoverDeployment = async (targetHost, productID = '') => {
     try {
       if (!targetHost) {
         dbg('recoverDeployment skipped: missing targetHost');
@@ -154,9 +154,12 @@ export default function ArkLanding() {
         const data = await res.json();
         const list = data.instances || [];
         const hostInstances = list.filter((item) => item.device_id === targetHost);
-        dbg('Recovered instances total/byHost', list.length, hostInstances.length);
-        if (hostInstances.length > 0) {
-          const last = hostInstances[0];
+        const productInstances = productID
+          ? hostInstances.filter((item) => String(item.product_id || '').trim() === String(productID).trim())
+          : hostInstances;
+        dbg('Recovered instances total/byHost/byProduct', list.length, hostInstances.length, productInstances.length);
+        if (productInstances.length > 0) {
+          const last = productInstances[0];
           dbg('Recovering active deployment', last.id, last.url, last.status);
           setActiveDeployment({
             instanceId: last.id,
@@ -164,12 +167,13 @@ export default function ArkLanding() {
             localUrl: last.local_url || '',
             friendlyUrl: buildFriendlyURL(last.id, last.friendly_url),
             status: last.status || 'success',
+            productId: last.product_id || '',
             productName: last.product_id || 'Instancia Activa',
             targetHost: last.device_id || ''
           });
           if (last.device_id) setSelectedHost(last.device_id);
         }
-        if (hostInstances.length === 0) {
+        if (productInstances.length === 0) {
           setActiveDeployment(null);
         }
       }
@@ -232,6 +236,7 @@ export default function ArkLanding() {
         localUrl: data.local_url || '',
         friendlyUrl: buildFriendlyURL(data.instance_id, data.friendly_url),
         status: 'running',
+        productId: product.id,
         productName: product.name,
         targetHost: data.target_host || targetHost,
         jobName: data.job_name || '',
@@ -334,6 +339,15 @@ export default function ArkLanding() {
   };
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
+  const selectedTargetHost = selectedHost || currentDevice?.target_host || '';
+  const activeStatus = String(activeDeployment?.status || '').toLowerCase();
+  const hasExistingInstance =
+    !!selectedProduct &&
+    !!activeDeployment &&
+    !!pickAccessURL(activeDeployment) &&
+    String(activeDeployment.productId || '') === String(selectedProduct.id || '') &&
+    String(activeDeployment.targetHost || '') === String(selectedTargetHost || '') &&
+    (activeStatus === 'success' || activeStatus === 'running' || activeStatus === 'ready');
   useEffect(() => {
     const fallbackHost = devices.map((d) => pickTargetHost(d)).find(Boolean) || '';
     if (!selectedHost && fallbackHost) {
@@ -346,8 +360,8 @@ export default function ArkLanding() {
   }, [devices, selectedHost, currentDevice]);
 
   useEffect(() => {
-    recoverDeployment(currentDevice?.target_host || '');
-  }, [currentDevice?.target_host]);
+    recoverDeployment(selectedTargetHost, selectedProductId);
+  }, [selectedTargetHost, selectedProductId]);
 
   if (loading) return <LoadingSkeleton />;
 
@@ -406,18 +420,29 @@ export default function ArkLanding() {
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => handleDeploy(selectedProduct)}
-                    disabled={isDeploying}
-                    className={`w-full py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all flex items-center justify-center gap-3 ${
-                      isDeploying
-                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-500 text-white shadow-xl shadow-blue-500/20 active:scale-95'
-                    }`}
-                  >
-                    {isDeploying ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
-                    {isDeploying ? 'Desplegando...' : 'Desplegar'}
-                  </button>
+                  {hasExistingInstance ? (
+                    <a
+                      href={pickAccessURL(activeDeployment)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-xl shadow-emerald-500/20 active:scale-95"
+                    >
+                      Abrir Instancia <ExternalLink size={18} />
+                    </a>
+                  ) : (
+                    <button
+                      onClick={() => handleDeploy(selectedProduct)}
+                      disabled={isDeploying}
+                      className={`w-full py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all flex items-center justify-center gap-3 ${
+                        isDeploying
+                          ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                          : 'bg-blue-600 hover:bg-blue-500 text-white shadow-xl shadow-blue-500/20 active:scale-95'
+                      }`}
+                    >
+                      {isDeploying ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
+                      {isDeploying ? 'Desplegando...' : 'Desplegar'}
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
