@@ -14,7 +14,7 @@ const PRODUCT_THEMES = {
 
 const dbg = (...args) => console.log('[Landing]', ...args);
 const LAST_TARGET_HOST_KEY = 'ark:last_target_host';
-const pickAccessURL = (d) => d?.localUrl || d?.friendlyUrl || d?.url || '';
+const pickAccessURL = (d) => d?.friendlyUrl || d?.localUrl || d?.url || '';
 
 const pickTargetHost = (device) => {
   const normalize = (v) => String(v || '').trim().split('/')[0];
