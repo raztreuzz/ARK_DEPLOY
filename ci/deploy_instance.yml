@@ -5,6 +5,8 @@
     base_dir: "/opt/ark/instances/{{ instance_id }}"
     product_src: "{{ playbook_dir }}/../products/{{ product_id }}"
     product_dst: "{{ base_dir }}/product"
+    shared_network_name: "ark_shared"
+    shared_network_subnet: "172.31.250.0/24"
 
   tasks:
     - name: Asegurar que exista el directorio base
@@ -36,6 +38,13 @@
           API_PORT=8080
           DB_PATH=/data/sara_memory.db
           CORS_ORIGINS=
+
+    - name: Asegurar red docker compartida de instancias
+      ansible.builtin.shell: |
+        set -eu
+        docker network inspect "{{ shared_network_name }}" >/dev/null 2>&1 || docker network create --driver bridge --subnet "{{ shared_network_subnet }}" "{{ shared_network_name }}"
+      args:
+        executable: /bin/sh
 
     - name: Ejecutar compose pull en cliente
       ansible.builtin.shell: |

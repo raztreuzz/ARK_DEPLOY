@@ -347,7 +347,7 @@ export default function ArkLanding() {
     !!pickAccessURL(activeDeployment) &&
     String(activeDeployment.productId || '') === String(selectedProduct.id || '') &&
     String(activeDeployment.targetHost || '') === String(selectedTargetHost || '') &&
-    (activeStatus === 'success' || activeStatus === 'running' || activeStatus === 'ready');
+    (activeStatus === 'success' || activeStatus === 'ready');
   useEffect(() => {
     const fallbackHost = devices.map((d) => pickTargetHost(d)).find(Boolean) || '';
     if (!selectedHost && fallbackHost) {

@@ -34,4 +34,4 @@ volumes:
 networks:
   ark_shared:
     external: true
-    name: bridge
+    name: ark_shared
