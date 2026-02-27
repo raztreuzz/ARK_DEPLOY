@@ -35,13 +35,6 @@
           APP_ENV={{ env_name }}
           {{ lookup('ansible.builtin.file', playbook_dir + '/../env/.env.client', errors='ignore') | default('API_PORT=8080\nDB_PATH=/data/sara_memory.db\nCORS_ORIGINS=', true) | trim }}
 
-    - name: Asegurar red docker compartida
-      ansible.builtin.shell: |
-        set -eu
-        docker network inspect ark_shared >/dev/null 2>&1 || docker network create ark_shared
-      args:
-        executable: /bin/sh
-
     - name: Ejecutar compose pull en cliente
       ansible.builtin.shell: |
         set -eu
