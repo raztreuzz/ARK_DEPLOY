@@ -33,7 +33,9 @@
         content: |
           INSTANCE_ID={{ instance_id }}
           APP_ENV={{ env_name }}
-          {{ lookup('ansible.builtin.file', playbook_dir + '/../env/.env.client', errors='ignore') | default('API_PORT=8080\nDB_PATH=/data/sara_memory.db\nCORS_ORIGINS=', true) | trim }}
+          API_PORT=8080
+          DB_PATH=/data/sara_memory.db
+          CORS_ORIGINS=
 
     - name: Ejecutar compose pull en cliente
       ansible.builtin.shell: |
