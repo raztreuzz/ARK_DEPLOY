@@ -41,6 +41,18 @@ func (m *mockRouteStore) GetRoute(instanceID string) (string, int, bool, error) 
 	return v.host, v.port, true, nil
 }
 
+func (m *mockRouteStore) GetRouteByShortID(shortID string) (string, string, int, bool, error) {
+	if m.getErr != nil {
+		return "", "", 0, false, m.getErr
+	}
+	for id, v := range m.routes {
+		if len(id) >= len(shortID) && id[:len(shortID)] == shortID {
+			return id, v.host, v.port, true, nil
+		}
+	}
+	return "", "", 0, false, nil
+}
+
 func (m *mockRouteStore) PutRoute(instanceID string, host string, port int) error {
 	if m.putErr != nil {
 		return m.putErr
