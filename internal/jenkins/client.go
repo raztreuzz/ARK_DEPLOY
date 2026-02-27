@@ -17,6 +17,8 @@ type Client struct {
 	httpc   *http.Client
 }
 
+// NewClient crea una nueva instancia del cliente Jenkins con la URL base, usuario y token proporcionados.
+// Retorna un puntero a Client.
 func NewClient(baseURL, user, token string) *Client {
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
@@ -25,12 +27,14 @@ func NewClient(baseURL, user, token string) *Client {
 		httpc:   &http.Client{},
 	}
 }
-
+//Creamos el espacio para obtener el crumb de jenkins que es una especie de token de seguridad 
 type crumbResp struct {
 	CrumbRequestField string `json:"crumbRequestField"`
 	Crumb             string `json:"crumb"`
 }
 
+// getCrumb obtiene el crumb de Jenkins necesario para realizar peticiones autenticadas que requieren protección CSRF.
+// Retorna el nombre del campo crumb, el valor del crumb y un error si ocurre alguno.
 func (c *Client) getCrumb() (string, string, error) {
 	endpoint := c.baseURL + "/crumbIssuer/api/json"
 
@@ -62,6 +66,7 @@ func (c *Client) getCrumb() (string, string, error) {
 	return cr.CrumbRequestField, cr.Crumb, nil
 }
 
+// Mapeamos el endpoint con parametros para el trigger del job y obtenemos el crumb para la autenticacion  
 func (c *Client) TriggerJobWithParams(jobName string, params map[string]string) (string, error) {
 	endpoint := fmt.Sprintf("%s/job/%s/buildWithParameters", c.baseURL, url.PathEscape(jobName))
 
@@ -102,6 +107,9 @@ func (c *Client) TriggerJobWithParams(jobName string, params map[string]string) 
 
 	return queueURL, nil
 }
+
+//Obtenemos logs  del build a traves del endpoint 
+
 func (c *Client) GetBuildLog(jobName string, buildNumber string) (string, error) {
 	endpoint := fmt.Sprintf("%s/job/%s/%s/consoleText", c.baseURL, url.PathEscape(jobName), buildNumber)
 

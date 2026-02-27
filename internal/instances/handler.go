@@ -13,12 +13,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+//Mapeamos las rutas de las instancias guardadas en el store y las urls de acceso para cada instancia proxieamos las peticiones a la url de destino
+
 type RouteStore interface {
 	GetRoute(instanceID string) (host string, port int, ok bool, err error)
 	GetRouteByShortID(shortID string) (instanceID string, host string, port int, ok bool, err error)
 	PutRoute(instanceID string, host string, port int) error
 	DeleteRoute(instanceID string) error
 }
+//Opcional
 
 type InstanceStore interface {
 	UpdateAccessURLs(id string, localURL string, friendlyURL string, status string) error
@@ -35,7 +38,7 @@ func NewHandler(store RouteStore, instanceStore InstanceStore) *Handler {
 		instanceStore: instanceStore,
 	}
 }
-
+// Defimos los campos requeridos para registrar la instancia 
 type RegisterReq struct {
 	InstanceID    string `json:"instance_id" binding:"required"`
 	TargetHost    string `json:"target_host" binding:"required"`
@@ -46,13 +49,14 @@ type RegisterReq struct {
 	FriendlyURL   string `json:"friendly_url"`
 }
 
+//Definimos las rutas 
 func (h *Handler) RegisterRoutes(r gin.IRoutes) {
 	r.POST("/instances/register", h.register)
 	r.DELETE("/instances/:id", h.delete)
 	r.Any("/instances/by-short/:short/*path", h.proxyByShort)
 	r.Any("/instances/:id/*path", h.proxy)
 }
-
+//Implementamos el handler y parsemos el json para validar campos
 func (h *Handler) register(c *gin.Context) {
 	var req RegisterReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -95,6 +99,7 @@ func (h *Handler) register(c *gin.Context) {
 		"friendly_url":       req.FriendlyURL,
 	})
 }
+//En desarrollo aun no es totalmente funcional 
 
 func (h *Handler) delete(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
@@ -110,6 +115,10 @@ func (h *Handler) delete(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
+
+// Reverse proxy por instance_id.
+// La ruta (instance_id -> target_host:target_port) ya fue registrada por Jenkins en /instances/register.
+// Aquí solo resolvemos el destino y reenviamos la request al contenedor.
 
 func (h *Handler) proxy(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))

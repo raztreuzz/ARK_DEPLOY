@@ -7,26 +7,26 @@
     product_dst: "{{ base_dir }}/product"
 
   tasks:
-    - name: Ensure base directory exists
+    - name: Asegurar que exista el directorio base
       ansible.builtin.file:
         path: "{{ base_dir }}"
         state: directory
         mode: "0755"
 
-    - name: Ensure product directory exists
+    - name: Asegurar que exista el directorio del producto
       ansible.builtin.file:
         path: "{{ product_dst }}"
         state: directory
         mode: "0755"
 
-    - name: Copy product template to client
+    - name: Copiar plantilla del producto al cliente
       ansible.posix.synchronize:
         src: "{{ product_src }}/"
         dest: "{{ product_dst }}/"
         recursive: true
         delete: true
 
-    - name: Write instance .env
+    - name: Escribir .env de la instancia
       ansible.builtin.copy:
         dest: "{{ product_dst }}/.env"
         mode: "0644"
@@ -37,7 +37,7 @@
           DB_PATH=/data/sara_memory.db
           CORS_ORIGINS=
 
-    - name: Compose pull on client
+    - name: Ejecutar compose pull en cliente
       ansible.builtin.shell: |
         set -eu
         cd "{{ product_dst }}"
@@ -45,7 +45,7 @@
       args:
         executable: /bin/sh
 
-    - name: Compose up on client
+    - name: Ejecutar compose up en cliente
       ansible.builtin.shell: |
         set -eu
         cd "{{ product_dst }}"

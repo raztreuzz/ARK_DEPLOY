@@ -1,5 +1,6 @@
 package products
 
+
 import (
 	"net/http"
 	"net/url"
@@ -10,6 +11,9 @@ import (
 	"ark_deploy/internal/storage"
 )
 
+
+
+// Store define la interfaz para el repositorio de productos.
 type Store interface {
 	Create(p storage.Product) error
 	GetAll() []storage.Product
@@ -18,10 +22,13 @@ type Store interface {
 	Delete(id string) error
 }
 
+// Utiliza un Store para acceder a los datos.
 type Handler struct {
 	store Store
 }
 
+// NewHandler crea un nuevo Handler de productos con el store proporcionado.
+// Panica si el store es nil.
 func NewHandler(store Store) *Handler {
 	if store == nil {
 		panic("products store is required")
@@ -29,6 +36,7 @@ func NewHandler(store Store) *Handler {
 	return &Handler{store: store}
 }
 
+//  representa el payload para crear un producto.
 type CreateProductRequest struct {
 	ID          string            `json:"id" binding:"required"`
 	Name        string            `json:"name" binding:"required"`
@@ -40,6 +48,8 @@ type CreateProductRequest struct {
 	WebPort     int               `json:"web_port"`
 }
 
+
+//se parse el json y valida los campos 
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -79,6 +89,7 @@ func (h *Handler) List(c *gin.Context) {
 	})
 }
 
+
 func (h *Handler) Get(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 
@@ -91,6 +102,7 @@ func (h *Handler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, product)
 }
 
+//Parsea valida y actualiza los campos del producto
 type UpdateProductRequest struct {
 	Name        string            `json:"name" binding:"required"`
 	Description string            `json:"description"`
@@ -101,14 +113,31 @@ type UpdateProductRequest struct {
 	WebPort     int               `json:"web_port"`
 }
 
+
 func (h *Handler) Update(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
+
+	existing, err := h.store.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"detail": err.Error()})
+		return
+	}
 
 	var req UpdateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
 		return
 	}
+
+	currentWebPort := existing.WebPort
+	if currentWebPort == 0 {
+		currentWebPort = 80
+	}
+	if req.WebPort != 0 && req.WebPort != currentWebPort {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "web_port cannot be changed after product creation"})
+		return
+	}
+	req.WebPort = currentWebPort
 
 	if err := validateProductFields(id, req.Name, req.DeployJobs, req.DeleteJob, req.WebService, req.WebPort); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
@@ -134,6 +163,7 @@ func (h *Handler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, product)
 }
 
+// Delete elimina un producto por su ID.
 func (h *Handler) Delete(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 
@@ -145,6 +175,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "product deleted"})
 }
 
+// Retorna un error si algún campo es inválido.
 func validateProductFields(id, name string, deployJobs map[string]string, deleteJob, webService string, webPort int) error {
 	if strings.TrimSpace(id) == "" {
 		return errString("id is required")
@@ -198,6 +229,7 @@ func normalizeDeployJobs(m map[string]string) map[string]string {
 	return out
 }
 
+
 func isSafeServiceName(s string) bool {
 	if s == "" {
 		return false
@@ -232,5 +264,6 @@ func isSafeJenkinsJobName(s string) bool {
 }
 
 type errString string
+
 
 func (e errString) Error() string { return string(e) }
