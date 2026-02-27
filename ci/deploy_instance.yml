@@ -6,7 +6,6 @@
     product_src: "{{ playbook_dir }}/../products/{{ product_id }}"
     product_dst: "{{ base_dir }}/product"
     shared_network_name: "ark_shared"
-    shared_network_subnet: "172.31.250.0/24"
 
   tasks:
     - name: Asegurar que exista el directorio base
@@ -42,7 +41,22 @@
     - name: Asegurar red docker compartida de instancias
       ansible.builtin.shell: |
         set -eu
-        docker network inspect "{{ shared_network_name }}" >/dev/null 2>&1 || docker network create --driver bridge --subnet "{{ shared_network_subnet }}" "{{ shared_network_name }}"
+        if docker network inspect "{{ shared_network_name }}" >/dev/null 2>&1; then
+          exit 0
+        fi
+
+        for subnet in 172.31.250.0/24 172.31.251.0/24 172.31.252.0/24 10.250.10.0/24 10.250.11.0/24 10.251.10.0/24; do
+          if docker network create --driver bridge --subnet "$subnet" "{{ shared_network_name }}" >/dev/null 2>&1; then
+            echo "created {{ shared_network_name }} with subnet $subnet"
+            exit 0
+          fi
+        done
+
+        # Ultimo intento sin subnet explicita.
+        docker network create --driver bridge "{{ shared_network_name }}" >/dev/null 2>&1 && exit 0
+
+        echo "no fue posible crear la red {{ shared_network_name }} (sin subredes disponibles)"
+        exit 1
       args:
         executable: /bin/sh
 
