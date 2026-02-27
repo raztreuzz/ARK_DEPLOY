@@ -66,6 +66,46 @@ func (s *RouteStore) GetRoute(instanceID string) (host string, port int, ok bool
 	return record.TargetHost, record.TargetPort, true, nil
 }
 
+func (s *RouteStore) GetRouteByShortID(shortID string) (instanceID string, host string, port int, ok bool, err error) {
+	ctx := context.Background()
+	short := strings.TrimSpace(strings.ToLower(shortID))
+	if short == "" {
+		return "", "", 0, false, nil
+	}
+
+	var cursor uint64
+	for {
+		keys, next, scanErr := arkredis.Client.Scan(ctx, cursor, routeKey(short+"*"), 100).Result()
+		if scanErr != nil {
+			return "", "", 0, false, scanErr
+		}
+
+		for _, key := range keys {
+			data, getErr := arkredis.Client.Get(ctx, key).Result()
+			if getErr != nil {
+				continue
+			}
+
+			var record Route
+			if unmarshalErr := json.Unmarshal([]byte(data), &record); unmarshalErr != nil {
+				continue
+			}
+
+			id := strings.TrimSpace(record.InstanceID)
+			if strings.HasPrefix(strings.ToLower(id), short) {
+				return id, record.TargetHost, record.TargetPort, true, nil
+			}
+		}
+
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return "", "", 0, false, nil
+}
+
 func (s *RouteStore) DeleteRoute(instanceID string) error {
 	ctx := context.Background()
 	return arkredis.Client.Del(ctx, routeKey(strings.TrimSpace(instanceID))).Err()

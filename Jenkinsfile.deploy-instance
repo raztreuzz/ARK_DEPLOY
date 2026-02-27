@@ -164,10 +164,23 @@ REMOTE_EOF
           set -eu
           PORT="$(cat target_port.txt)"
           CONTAINER="$(cat target_container.txt)"
+          SHORT_ID="$(echo "${INSTANCE_ID}" | cut -c1-8)"
+          ARK_PUBLIC_BASE="${ARK_CALLBACK_URL%/api/instances/register}"
+          if [ "${ARK_PUBLIC_BASE}" = "${ARK_CALLBACK_URL}" ]; then
+            ARK_PUBLIC_BASE="${ARK_CALLBACK_URL%/}"
+          fi
           LOCAL_URL="http://localhost:${PORT}/"
-          FRIENDLY_URL=""
+          FRIENDLY_URL="${ARK_PUBLIC_BASE}/instances/by-short/${SHORT_ID}/"
           if [ -f friendly_url.txt ]; then
-            FRIENDLY_URL="$(cat friendly_url.txt)"
+            CANDIDATE_FRIENDLY_URL="$(cat friendly_url.txt)"
+            case "${CANDIDATE_FRIENDLY_URL}" in
+              *".localhost"*)
+                echo "Ignoring local-only friendly URL: ${CANDIDATE_FRIENDLY_URL}"
+                ;;
+              http://*|https://*)
+                FRIENDLY_URL="${CANDIDATE_FRIENDLY_URL}"
+                ;;
+            esac
           fi
 
           cat > deploy_callback_payload.json <<EOF

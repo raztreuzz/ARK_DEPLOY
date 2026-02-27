@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 type RouteStore interface {
 	GetRoute(instanceID string) (host string, port int, ok bool, err error)
+	GetRouteByShortID(shortID string) (instanceID string, host string, port int, ok bool, err error)
 	PutRoute(instanceID string, host string, port int) error
 	DeleteRoute(instanceID string) error
 }
@@ -47,6 +49,7 @@ type RegisterReq struct {
 func (h *Handler) RegisterRoutes(r gin.IRoutes) {
 	r.POST("/instances/register", h.register)
 	r.DELETE("/instances/:id", h.delete)
+	r.Any("/instances/by-short/:short/*path", h.proxyByShort)
 	r.Any("/instances/:id/*path", h.proxy)
 }
 
@@ -129,6 +132,44 @@ func (h *Handler) proxy(c *gin.Context) {
 		return
 	}
 
+	origPath := c.Param("path")
+	if origPath == "" {
+		origPath = "/"
+	}
+
+	h.proxyTo(c, host, port, origPath)
+}
+
+func (h *Handler) proxyByShort(c *gin.Context) {
+	shortID := strings.TrimSpace(strings.ToLower(c.Param("short")))
+	if !regexp.MustCompile(`^[a-f0-9]{8}$`).MatchString(shortID) {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid short id"})
+		return
+	}
+
+	_, host, port, ok, err := h.store.GetRouteByShortID(shortID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"detail": "instance not found"})
+		return
+	}
+	if port <= 0 || port > 65535 {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "invalid target_port"})
+		return
+	}
+
+	origPath := c.Param("path")
+	if origPath == "" {
+		origPath = "/"
+	}
+
+	h.proxyTo(c, host, port, origPath)
+}
+
+func (h *Handler) proxyTo(c *gin.Context, host string, port int, origPath string) {
 	target, err := url.Parse("http://" + host + ":" + strconv.Itoa(port))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
@@ -140,11 +181,6 @@ func (h *Handler) proxy(c *gin.Context) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadGateway)
 		_, _ = w.Write([]byte(`{"detail":"upstream unreachable"}`))
-	}
-
-	origPath := c.Param("path")
-	if origPath == "" {
-		origPath = "/"
 	}
 
 	c.Request.URL.Path = singleJoiningSlash(target.Path, origPath)
